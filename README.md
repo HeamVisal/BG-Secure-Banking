@@ -1,35 +1,134 @@
-# BG Bank: Secure RPC-Based Banking System with Fraud Detection and Web GUI
+# SecureBG Banking Web
 
-This is a small distributed banking system for an Introduction to Parallel and Distributed Systems course. Team 3 is an odd-numbered team, so this project uses RPC instead of RMI.
+SecureBG Banking Web is a Python-based secure banking web application built with Flask, XML-RPC services, SQLite, Fernet encrypted login tickets, password hashing, profile management, transaction tracking, and rule-based fraud detection.
 
-The project uses Python XML-RPC for service communication, Flask for the web GUI, Fernet symmetric encryption for login tickets, SQLite for storage, rule-based fraud detection, and `threading.Lock` for safe concurrent banking operations.
+The project demonstrates a distributed banking workflow where the web interface communicates with separate Authentication and Banking services through RPC.
+
+## Features
+
+- Customer registration and login
+- Separate login password and action password
+- Encrypted session ticket using Fernet symmetric encryption
+- Customer profile and profile picture upload
+- Account dashboard with balance, account details, risk score, and recent transactions
+- Deposit, withdraw, and transfer workflows
+- Action password protection for withdraw and transfer
+- Transaction history with transaction IDs, balances, status, and risk information
+- Rule-based fraud detection report
+- Audit logging for important user actions
+- SQLite database initialization and migration helpers
+- Threaded XML-RPC servers with lock-protected banking operations
 
 ## System Architecture
 
 ```text
-Web Browser
-    |
-    v
-Flask Web App Client, port 5000
-    | XML-RPC
-    v
-Authentication Service, port 8001
-
-Flask Web App Client, port 5000
-    | XML-RPC
-    v
-Banking Server, port 8002
+Browser
+  |
+  v
+Flask Web App
+127.0.0.1:5000
+  |
+  | XML-RPC
+  +--------------------------+
+  |                          |
+  v                          v
+Authentication Service       Banking Server
+127.0.0.1:8001              127.0.0.1:8002
+  |                          |
+  +------------+-------------+
+               |
+               v
+          SQLite Database
+          banking.db
 ```
 
-The browser never calls the RPC servers directly. The browser talks to Flask, and Flask calls the Authentication Service and Banking Server through XML-RPC.
+The browser only talks to the Flask application. Flask calls the Authentication Service and Banking Server through XML-RPC.
 
-## RPC Explanation
+## Main Workflow
 
-RPC means Remote Procedure Call. It lets one program call a function running in another process. In this system, Flask calls methods such as `login`, `deposit`, `transfer`, `get_user_profile`, and `get_dashboard_summary` on separate XML-RPC servers.
+1. A customer opens the web app and registers an account.
+2. The Authentication Service validates the form, hashes the login password and action password, creates the user profile, creates a bank account, and writes an audit log.
+3. The customer logs in with the login password.
+4. The Authentication Service returns an encrypted Fernet ticket.
+5. Flask stores the ticket in the user session.
+6. Banking actions send the ticket to the Banking Server.
+7. The Banking Server decrypts and validates the ticket before processing requests.
+8. Deposits update the balance directly.
+9. Withdrawals and transfers require the action password.
+10. Each transaction is checked by the fraud detection rules and saved in the database.
+11. The dashboard, history page, fraud page, and profile page read data through Banking Server RPC methods.
 
-## Improved Database Schema
+## Application Pages
 
-SQLite tables:
+| Page | Route | Description |
+| --- | --- | --- |
+| Login | `/login` | Customer login page |
+| Register | `/register` | Customer registration and profile setup |
+| Dashboard | `/dashboard` | Account summary, balance, risk score, and recent transactions |
+| Deposit | `/deposit` | Add money to the account |
+| Withdraw | `/withdraw` | Withdraw money with action password |
+| Transfer | `/transfer` | Transfer money to another user with action password |
+| History | `/history` | View transaction history |
+| Fraud | `/fraud` | View fraud detection report |
+| Profile | `/profile` | View customer and account details |
+| Edit Profile | `/profile/edit` | Update editable profile fields and profile picture |
+| About | `/about` | Project information page |
+| Logout | `/logout` | Clear the session and return to login |
+
+## RPC Services
+
+### Authentication Service
+
+Runs on:
+
+```text
+http://127.0.0.1:8001
+```
+
+Methods:
+
+- `register_user(registration_data)`
+- `login(username, password)`
+
+Responsibilities:
+
+- Validate registration data
+- Hash login and action passwords
+- Create customer user, profile, and account records
+- Generate encrypted login tickets
+- Update last login time
+- Write authentication audit logs
+
+### Banking Server
+
+Runs on:
+
+```text
+http://127.0.0.1:8002
+```
+
+Methods:
+
+- `get_balance(ticket)`
+- `deposit(ticket, amount)`
+- `withdraw(ticket, amount, action_password)`
+- `transfer(ticket, receiver_username, amount, action_password)`
+- `view_transaction_history(ticket)`
+- `detect_fraud(ticket)`
+- `get_risk_score(ticket)`
+- `get_user_profile(ticket)`
+- `update_user_profile(ticket, profile_data)`
+- `get_account_details(ticket)`
+- `get_dashboard_summary(ticket)`
+- `get_audit_logs(ticket)`
+
+All Banking Server methods validate the encrypted ticket before loading or changing account data.
+
+## Database Schema
+
+The project uses SQLite with the database file `banking.db`.
+
+Tables:
 
 ```text
 users:
@@ -54,120 +153,58 @@ audit_logs:
 id, username, action, details, ip_address, created_at
 ```
 
-`init_db()` creates missing tables and adds missing columns where possible. For a clean class demo, it is still okay to stop all servers and delete `banking.db`; the tables are recreated automatically.
+`database.init_db()` creates missing tables and adds missing columns where possible.
 
-## Authentication Service
+## Security Design
 
-The Authentication Service runs on port `8001`.
+- Passwords are stored as hashes, not plain text.
+- The login password is used only for authentication.
+- The action password is separate and required for sensitive operations.
+- Login creates an encrypted Fernet ticket.
+- Banking Server RPC methods reject invalid or expired tickets.
+- Withdraw and transfer operations are protected by an action password.
+- Local secrets and runtime files such as `secret.key` and `banking.db` are ignored by Git.
 
-It provides:
+## Fraud Detection
 
-- `register_user(registration_data)`
-- `login(username, password)`
-
-Registration stores login data in `users`, personal data in `customer_profiles`, creates an account with an account number like `AC2026123456`, and writes an audit log.
-
-The login password and action password are separate. The login password is used to enter the system. The action password is required for sensitive money-moving actions like withdrawal and transfer. Deposit does not require the action password because adding money does not reduce the user's balance.
-
-The profile picture is optional. If the user uploads one, Flask crops and resizes it to a fixed `300x300` JPG, saves it in `static/uploads`, and stores the filename in the profile table. If no picture is uploaded, the web UI shows a circular avatar using the first letter of the user's full name.
-
-Login verifies the password hash, updates `last_login`, creates an encrypted Fernet ticket, and writes an audit log.
-
-## Banking Server RPC Methods
-
-The Banking Server runs on port `8002`.
-
-It provides:
-
-- `get_balance(ticket)`
-- `deposit(ticket, amount)`
-- `withdraw(ticket, amount, action_password)`
-- `transfer(ticket, receiver_username, amount, action_password)`
-- `view_transaction_history(ticket)`
-- `detect_fraud(ticket)`
-- `get_risk_score(ticket)`
-- `get_user_profile(ticket)`
-- `update_user_profile(ticket, profile_data)`
-- `get_account_details(ticket)`
-- `get_dashboard_summary(ticket)`
-- `get_audit_logs(ticket)`
-
-Every method verifies the encrypted ticket first and returns a dictionary:
-
-```python
-{
-    "success": True,
-    "message": "...",
-    "data": {}
-}
-```
-
-## Symmetric Encryption
-
-The project uses Fernet symmetric encryption from the `cryptography` package. The same secret key encrypts and decrypts login tickets.
-
-The key is stored in `secret.key`. The Authentication Service creates encrypted tickets, and the Banking Server decrypts and verifies them.
-
-## Profile Page
-
-The profile page shows customer and account details:
-
-- username
-- full name
-- gender
-- date of birth
-- phone number
-- email
-- profile picture or first-letter avatar
-- national ID
-- address
-- city
-- country
-- occupation
-- account number
-- account type
-- account status
-- currency
-- created date
-- last login
-
-The edit profile page only allows editing customer contact fields: full name, phone number, email, address, city, country, and occupation. It does not allow changing username, national ID, account number, balance, role, or account status.
-
-## Dashboard
-
-The dashboard shows:
-
-- full name
-- account number
-- account type
-- current balance
-- currency
-- account status
-- risk score
-- total transactions
-- last 5 transactions
-
-## About Us Page
-
-The `/about` page introduces BG Bank, displays the image from `static/bank-image/Full-Image.png`, and explains the project purpose, security focus, fraud detection, and RPC-based distributed design.
-
-## Fraud Detection Rules
+Fraud detection is rule-based and calculates a risk score from `0` to `100`.
 
 A transaction can be marked suspicious when:
 
-- amount is greater than 500
-- amount is more than 3 times the user's average transaction amount
-- more than 5 transactions occur within 1 minute
-- withdrawal or transfer drops balance by more than 80%
-- transfer goes to many different receivers quickly
-- amount exceeds the daily transfer limit
-- account status is not active
+- The amount is greater than `500`
+- The amount is more than three times the user's average transaction amount
+- The user makes at least five transactions within one minute
+- A withdraw or transfer drops the balance by more than `80%`
+- Transfers go to many different receivers quickly
+- A transfer exceeds the daily transfer limit
+- The account status is not active
 
-The fraud module returns:
+Transactions with a risk score of `25` or higher are flagged as suspicious.
 
-- `risk_score` from 0 to 100
-- `fraud_flag`
-- `reasons` list
+## Project Structure
+
+```text
+.
+├── auth_service.py       # Authentication XML-RPC service
+├── banking_server.py     # Banking XML-RPC service
+├── database.py           # SQLite schema and data access helpers
+├── fraud_detection.py    # Rule-based fraud detection logic
+├── security.py           # Password hashing and Fernet ticket helpers
+├── web_app.py            # Flask web application
+├── requirements.txt      # Python dependencies
+├── static/               # CSS, JavaScript, images, uploads
+└── templates/            # Flask HTML templates
+```
+
+## Requirements
+
+- Python 3.11 or newer
+- Flask
+- cryptography
+- Werkzeug
+- Pillow
+
+Install dependencies from `requirements.txt`.
 
 ## Installation
 
@@ -193,7 +230,7 @@ pip install -r requirements.txt
 
 ## How to Run
 
-Open three terminal windows in this project folder.
+Open three terminal windows in the project folder.
 
 Terminal 1:
 
@@ -213,7 +250,7 @@ Terminal 3:
 python web_app.py
 ```
 
-Open:
+Then open:
 
 ```text
 http://127.0.0.1:5000
@@ -221,18 +258,19 @@ http://127.0.0.1:5000
 
 ## Demo Steps
 
-1. Register two users, for example `alice` and `bob`, with profile information.
-2. Set a login password and a different action password during registration.
-3. Login as `alice`.
-4. Check the dashboard summary.
-5. Open the profile page and edit allowed profile fields.
-6. Deposit money, for example `1000`. No action password is required.
-7. Withdraw or transfer money using the action password.
-8. Try a large transfer, for example `700`, to trigger fraud detection.
-9. View transaction history and confirm transaction IDs, balances before/after, risk score, and status.
-10. View the fraud report.
+1. Register two users, for example `alice` and `bob`.
+2. Use different values for the login password and action password.
+3. Log in as `alice`.
+4. Review the dashboard summary.
+5. Open the profile page and update editable profile information.
+6. Deposit money into Alice's account.
+7. Withdraw money using Alice's action password.
+8. Transfer money from `alice` to `bob` using Alice's action password.
+9. Try a large or unusual transaction to trigger fraud detection.
+10. Open transaction history to review transaction IDs, balances, status, and risk score.
+11. Open the fraud page to review suspicious transactions and risk reasons.
 
-## Common Problems and Solutions
+## Common Problems
 
 ### Authentication Service is not running
 
@@ -252,30 +290,12 @@ python banking_server.py
 
 ### Port already in use
 
-Stop the process using the port, or change the port numbers in the Python files.
+Stop the process using the port, or update the port numbers in `web_app.py`, `auth_service.py`, and `banking_server.py`.
 
 ### Invalid or expired token
 
-Login again. Tickets expire after 30 minutes.
+Log out and log in again.
 
-### Missing dependency
+### Reset demo data
 
-Run:
-
-```bash
-pip install -r requirements.txt
-```
-
-### Database migration looks confusing during testing
-
-Stop all servers and delete `banking.db`, then start the services again:
-
-```bash
-python auth_service.py
-python banking_server.py
-python web_app.py
-```
-
-The database tables are recreated automatically.
-
-This is also the simplest fix for older demo users that were created before `action_password_hash` existed.
+Stop all three running services, delete `banking.db`, then start the services again. The database tables will be recreated automatically.
