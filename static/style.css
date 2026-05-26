@@ -710,3 +710,29 @@ tr:hover td { background: rgba(255,255,255,.02); }
     padding: 24px 16px;
   }
 }
+
+/* Fraud report */
+.risk-gauge {
+  color: #fff;
+  text-align: center;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.12), 0 18px 50px rgba(0,0,0,.35);
+}
+
+.risk-gauge .rg-val {
+  color: #fff;
+  line-height: 1;
+  text-shadow: 0 2px 10px rgba(0,0,0,.45);
+}
+
+.risk-gauge .rg-label {
+  color: rgba(255,255,255,.78);
+  font-weight: 700;
+  text-shadow: 0 2px 10px rgba(0,0,0,.45);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+  transform: none;
+  box-shadow: none;
+}

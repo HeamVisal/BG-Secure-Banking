@@ -66,6 +66,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const color = score >= 70 ? "#f43f5e" : score >= 40 ? "#f59e0b" : "#10b981";
     const pct = score / 100;
     gauge.style.background = `conic-gradient(${color} ${pct}turn, rgba(255,255,255,0.06) 0turn)`;
-    gauge.querySelector(".rg-val").style.color = color;
+    gauge.querySelector(".rg-val").style.color = "#fff";
   });
 });
