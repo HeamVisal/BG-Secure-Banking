@@ -27,7 +27,6 @@ body {
   color: var(--text);
   font-family: 'Inter', sans-serif;
   line-height: 1.6;
-  display: flex;
   min-height: 100vh;
 }
 
@@ -660,4 +659,54 @@ tr:hover td { background: rgba(255,255,255,.02); }
   .balance-hero .bh-amount { font-size: 30px; }
   .public-header { padding: 14px 20px; flex-direction: column; gap: 12px; }
   .public-nav { gap: 16px; }
+}
+
+/* Public/auth layout fixes */
+.public-body {
+  display: block;
+  min-height: 100vh;
+}
+
+.public-header {
+  width: 100%;
+}
+
+.public-header .brand {
+  border-bottom: 0;
+  padding: 0;
+  flex-shrink: 0;
+}
+
+.public-nav a.active {
+  color: var(--text);
+}
+
+.auth-public-content {
+  max-width: none;
+  min-height: calc(100vh - 69px);
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.auth-public-content .auth-page {
+  width: 100%;
+  min-height: calc(100vh - 69px);
+  padding: 32px 24px;
+}
+
+.auth-page-register {
+  align-items: flex-start;
+}
+
+@media (max-width: 768px) {
+  .auth-public-content {
+    min-height: calc(100vh - 105px);
+  }
+
+  .auth-public-content .auth-page {
+    min-height: calc(100vh - 105px);
+    padding: 24px 16px;
+  }
 }
