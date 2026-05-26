@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <img src="{{ url_for('static', filename='bank-image/BG-Bank.ico') }}" alt="BG Bank">
+      <span>BG Bank</span>
+    </div>
+    <h1 class="auth-title">Welcome back</h1>
+    <p class="auth-sub">Sign in to your account to continue.</p>
+
+    <form method="post" id="login-form">
+      <div class="field">
+        <label for="username">Username</label>
+        <input id="username" name="username" type="text" placeholder="Enter your username" required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" placeholder="Enter your password" required>
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+    </form>
+
+    <p class="auth-link">New to BG Bank? <a href="{{ url_for('register') }}">Create an account</a></p>
+  </div>
+</div>
+{% endblock %}

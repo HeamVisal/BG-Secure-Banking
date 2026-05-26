@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tx-page">
+  <div class="page-title">Transfer</div>
+  <div class="page-sub">Send money to another BG Bank user.</div>
+
+  <div class="tx-hint warn">
+    <i class="fa-solid fa-lock"></i>
+    <span>Your action password is required to authorize transfers.</span>
+  </div>
+
+  <div class="card">
+    <form method="post" class="money-form">
+      <div class="field">
+        <label for="receiver_username">Recipient Username</label>
+        <input id="receiver_username" name="receiver_username" type="text" required autofocus
+          placeholder="Enter recipient's username">
+      </div>
+      <div class="field">
+        <label for="amount">Amount</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0.01" required placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="action_password">Action Password</label>
+        <input id="action_password" name="action_password" type="password" required placeholder="Enter action password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full"><i class="fa-solid fa-paper-plane"></i> Send Transfer</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tx-page">
+  <div class="page-title">Withdraw</div>
+  <div class="page-sub">Withdraw funds securely using your action password.</div>
+
+  <div class="tx-hint warn">
+    <i class="fa-solid fa-lock"></i>
+    <span>Your action password is required to authorize this withdrawal.</span>
+  </div>
+
+  <div class="card">
+    <form method="post" class="money-form">
+      <div class="field">
+        <label for="amount">Amount</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0.01" required autofocus placeholder="0.00">
+      </div>
+      <div class="field">
+        <label for="action_password">Action Password</label>
+        <input id="action_password" name="action_password" type="password" required placeholder="Enter action password">
+      </div>
+      <button type="submit" class="btn btn-warning btn-full"><i class="fa-solid fa-money-bill-wave"></i> Withdraw Funds</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

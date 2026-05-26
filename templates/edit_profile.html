@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="flex-between">
+  <div>
+    <div class="page-title">Edit Profile</div>
+    <div class="page-sub">Update your contact information. Username, ID, and account details cannot be changed.</div>
+  </div>
+  <a href="{{ url_for('profile') }}" class="btn btn-ghost"><i class="fa-solid fa-arrow-left"></i> Back to Profile</a>
+</div>
+
+<div class="card form-wrap-wide">
+  <form method="post" enctype="multipart/form-data">
+    <!-- Avatar display -->
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:28px;padding-bottom:24px;border-bottom:1px solid var(--line);">
+      {% if profile.profile_picture %}
+        <img class="avatar avatar-xl" src="{{ url_for('static', filename='uploads/' ~ profile.profile_picture) }}" alt="Profile picture">
+      {% else %}
+        <div class="avatar avatar-xl">{{ (profile.full_name or 'U')[0]|upper }}</div>
+      {% endif %}
+      <div>
+        <div style="font-weight:700;margin-bottom:4px;">Profile Picture</div>
+        <div class="muted" style="font-size:13px;margin-bottom:10px;">Upload a JPG or PNG. It will be cropped to 300×300.</div>
+        <input id="profile_picture" name="profile_picture" type="file" accept="image/*" style="font-size:13px;">
+      </div>
+    </div>
+
+    <div class="form-section-title">Contact Information</div>
+    <div class="form-grid">
+      <div class="field">
+        <label for="full_name">Full Name</label>
+        <input id="full_name" name="full_name" type="text" required value="{{ profile.full_name or '' }}">
+      </div>
+      <div class="field">
+        <label for="phone_number">Phone Number</label>
+        <input id="phone_number" name="phone_number" type="text" required value="{{ profile.phone_number or '' }}">
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required value="{{ profile.email or '' }}">
+      </div>
+      <div class="field">
+        <label for="occupation">Occupation</label>
+        <input id="occupation" name="occupation" type="text" value="{{ profile.occupation or '' }}">
+      </div>
+      <div class="field full-row">
+        <label for="address">Address</label>
+        <input id="address" name="address" type="text" value="{{ profile.address or '' }}">
+      </div>
+      <div class="field">
+        <label for="city">City</label>
+        <input id="city" name="city" type="text" value="{{ profile.city or '' }}">
+      </div>
+      <div class="field">
+        <label for="country">Country</label>
+        <input id="country" name="country" type="text" value="{{ profile.country or '' }}">
+      </div>
+    </div>
+
+    <div style="display:flex;gap:12px;margin-top:8px;">
+      <button type="submit" class="btn btn-primary"><i class="fa-solid fa-floppy-disk"></i> Save Changes</button>
+      <a href="{{ url_for('profile') }}" class="btn btn-ghost">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="tx-page">
+  <div class="page-title">Deposit</div>
+  <div class="page-sub">Add funds to your account instantly.</div>
+
+  <div class="tx-hint">
+    <i class="fa-solid fa-circle-check"></i>
+    <span>No action password required for deposits.</span>
+  </div>
+
+  <div class="card">
+    <form method="post" class="money-form">
+      <div class="field">
+        <label for="amount">Amount</label>
+        <input id="amount" name="amount" type="number" step="0.01" min="0.01" required autofocus placeholder="0.00">
+      </div>
+      <button type="submit" class="btn btn-success btn-full"><i class="fa-solid fa-piggy-bank"></i> Deposit Funds</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

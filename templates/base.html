@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BG Bank</title>
+  <meta name="description" content="BG Bank — Secure RPC-based distributed banking system with fraud detection.">
+  <link rel="icon" href="{{ url_for('static', filename='bank-image/BG-Bank.ico') }}">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+  {% for category, message in messages %}
+    <div class="toast-data" data-category="{{ category }}" data-message="{{ message }}"></div>
+  {% endfor %}
+{% endwith %}
+
+<div id="toast-container"></div>
+
+{% if session.get('ticket') %}
+<aside class="sidebar">
+  <a class="brand" href="{{ url_for('dashboard') }}">
+    <img src="{{ url_for('static', filename='bank-image/BG-Bank.ico') }}" alt="BG Bank logo">
+    <span>BG Bank</span>
+  </a>
+  <nav>
+    <a href="{{ url_for('dashboard') }}"><i class="fa-solid fa-house nav-icon"></i> Dashboard</a>
+    <a href="{{ url_for('deposit') }}"><i class="fa-solid fa-piggy-bank nav-icon"></i> Deposit</a>
+    <a href="{{ url_for('withdraw') }}"><i class="fa-solid fa-money-bill-wave nav-icon"></i> Withdraw</a>
+    <a href="{{ url_for('transfer') }}"><i class="fa-solid fa-paper-plane nav-icon"></i> Transfer</a>
+    <a href="{{ url_for('history') }}"><i class="fa-solid fa-list-check nav-icon"></i> History</a>
+    <a href="{{ url_for('fraud') }}"><i class="fa-solid fa-shield-halved nav-icon"></i> Fraud Report</a>
+    <a href="{{ url_for('profile') }}"><i class="fa-solid fa-user nav-icon"></i> Profile</a>
+    <a href="{{ url_for('about') }}"><i class="fa-solid fa-circle-info nav-icon"></i> About Us</a>
+  </nav>
+  <div class="sidebar-footer">
+    <a href="{{ url_for('logout') }}"><i class="fa-solid fa-right-from-bracket nav-icon"></i> Logout</a>
+  </div>
+</aside>
+
+<button class="sidebar-toggle" id="sidebar-toggle" aria-label="Toggle menu"><i class="fa-solid fa-bars"></i></button>
+{% else %}
+<header class="public-header">
+  <a class="brand" href="{{ url_for('login') }}">
+    <img src="{{ url_for('static', filename='bank-image/BG-Bank.ico') }}" alt="BG Bank logo">
+    <span>BG Bank</span>
+  </a>
+  <nav class="public-nav">
+    <a href="{{ url_for('about') }}">About Us</a>
+    <a href="{{ url_for('login') }}">Login</a>
+    <a href="{{ url_for('register') }}">Register</a>
+  </nav>
+</header>
+{% endif %}
+
+<div class="{% if session.get('ticket') %}content-wrapper{% endif %}">
+  <main class="{% if session.get('ticket') %}main-content{% else %}public-content{% endif %}">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>

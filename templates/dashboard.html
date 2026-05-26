@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Balance Hero -->
+<div class="balance-hero">
+  <div class="bh-left">
+    <div class="bh-label">Current Balance</div>
+    <div class="bh-amount">{{ summary.currency }} {{ "%.2f"|format(summary.balance) }}</div>
+    <div style="color:var(--muted);font-size:13px;margin-top:8px;">{{ summary.account_type }} · {{
+      summary.account_number }}</div>
+  </div>
+  <div class="bh-right">
+    {% if summary.profile_picture %}
+    <img class="avatar avatar-lg" src="{{ url_for('static', filename='uploads/' ~ summary.profile_picture) }}"
+      alt="Profile">
+    {% else %}
+    <div class="avatar avatar-lg">{{ (summary.full_name or summary.username or 'U')[0]|upper }}</div>
+    {% endif %}
+    <div class="bh-name" style="margin-top:10px;">{{ summary.full_name }}</div>
+    <div class="bh-acc muted">@{{ summary.username if summary.username else '' }}</div>
+  </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="stats-grid section-gap">
+  <div class="stat-card">
+    <div class="label">Account Status</div>
+    <div class="value">
+      <span class="badge {% if summary.account_status == 'active' %}badge-success{% else %}badge-error{% endif %}">
+        {{ summary.account_status }}
+      </span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Risk Score</div>
+    <div
+      class="value {% if summary.risk_score >= 70 %}text-error{% elif summary.risk_score >= 40 %}text-warning{% else %}text-success{% endif %}">
+      {{ summary.risk_score }}<span style="font-size:14px;color:var(--muted)">/100</span>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Total Transactions</div>
+    <div class="value">{{ summary.total_transactions }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="label">Last Login</div>
+    <div class="value" style="font-size:15px;">{{ summary.last_login or "—" }}</div>
+  </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="flex-between">
+  <div>
+    <div class="page-title">Quick Actions</div>
+  </div>
+</div>
+<div class="action-grid section-gap">
+  <a class="action-card" href="{{ url_for('deposit') }}">
+    <div class="ac-icon"><i class="fa-solid fa-piggy-bank"></i></div>
+    <div class="ac-label">Deposit</div>
+    <div class="ac-desc">Add funds to your account.</div>
+  </a>
+  <a class="action-card" href="{{ url_for('withdraw') }}">
+    <div class="ac-icon"><i class="fa-solid fa-money-bill-wave"></i></div>
+    <div class="ac-label">Withdraw</div>
+    <div class="ac-desc">Withdraw with thread-safe locking.</div>
+  </a>
+  <a class="action-card" href="{{ url_for('transfer') }}">
+    <div class="ac-icon"><i class="fa-solid fa-paper-plane"></i></div>
+    <div class="ac-label">Transfer</div>
+    <div class="ac-desc">Send money to another user.</div>
+  </a>
+  <a class="action-card" href="{{ url_for('profile') }}">
+    <div class="ac-icon"><i class="fa-solid fa-user"></i></div>
+    <div class="ac-label">Profile</div>
+    <div class="ac-desc">View and edit your profile.</div>
+  </a>
+</div>
+
+<!-- Recent Transactions -->
+<div class="flex-between">
+  <div class="page-title">Recent Transactions</div>
+  <a href="{{ url_for('history') }}" class="btn btn-ghost" style="padding:8px 16px;font-size:13px;">View All →</a>
+</div>
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Transaction ID</th>
+        <th>Type</th>
+        <th>Amount</th>
+        <th>Status</th>
+        <th>Risk</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tx in summary.last_transactions %}
+      <tr>
+        <td style="font-family:monospace;font-size:12px;color:var(--muted)">{{ tx.transaction_id or tx.id }}</td>
+        <td>{{ tx.transaction_type }}</td>
+        <td class="text-cyan" style="font-weight:600;">{{ tx.currency }} {{ "%.2f"|format(tx.amount) }}</td>
+        <td>
+          <span
+            class="badge {% if tx.status == 'success' %}badge-success{% elif tx.status == 'failed' %}badge-error{% else %}badge-warning{% endif %}">
+            {{ tx.status }}
+          </span>
+        </td>
+        <td>
+          <span
+            class="badge {% if tx.risk_score >= 70 %}badge-error{% elif tx.risk_score >= 40 %}badge-warning{% else %}badge-success{% endif %}">
+            {{ tx.risk_score }}/100
+          </span>
+        </td>
+        <td class="muted" style="font-size:13px;">{{ tx.created_at }}</td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="6" class="empty">No transactions yet. Make your first deposit!</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

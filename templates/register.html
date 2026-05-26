@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-page" style="align-items:flex-start; padding: 40px 24px;">
+  <div class="register-box" style="margin: 0 auto;">
+    <div class="auth-logo">
+      <img src="{{ url_for('static', filename='bank-image/BG-Bank.ico') }}" alt="BG Bank">
+      <span>BG Bank</span>
+    </div>
+    <h1 class="auth-title">Create Account</h1>
+    <p class="auth-sub">Fill in your details to open a new banking account.</p>
+
+    <form method="post" enctype="multipart/form-data">
+
+      <!-- Account Security -->
+      <div class="form-section-title"><i class="fa-solid fa-lock"></i> Account Security</div>
+      <div class="form-grid">
+        <div class="field">
+          <label for="username">Username</label>
+          <input id="username" name="username" type="text" required autofocus value="{{ form_data.username or '' }}" placeholder="Choose a username">
+        </div>
+        <div class="field">
+          <label for="password">Login Password</label>
+          <input id="password" name="password" type="password" required placeholder="Create a password">
+        </div>
+        <div class="field">
+          <label for="confirm_password">Confirm Password</label>
+          <input id="confirm_password" name="confirm_password" type="password" required placeholder="Repeat password">
+        </div>
+        <div class="field">
+          <label for="action_password">Action Password</label>
+          <input id="action_password" name="action_password" type="password" required placeholder="For transfers & withdrawals">
+        </div>
+        <div class="field full-row">
+          <label for="confirm_action_password">Confirm Action Password</label>
+          <input id="confirm_action_password" name="confirm_action_password" type="password" required placeholder="Repeat action password">
+        </div>
+      </div>
+
+      <!-- Personal Info -->
+      <div class="form-section-title" style="margin-top:24px;"><i class="fa-solid fa-user"></i> Personal Information</div>
+      <div class="form-grid">
+        <div class="field full-row">
+          <label for="full_name">Full Name</label>
+          <input id="full_name" name="full_name" type="text" required value="{{ form_data.full_name or '' }}" placeholder="Your full name">
+        </div>
+        <div class="field">
+          <label for="gender">Gender</label>
+          <select id="gender" name="gender">
+            <option value="Female">Female</option>
+            <option value="Male">Male</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="date_of_birth">Date of Birth</label>
+          <input id="date_of_birth" name="date_of_birth" type="date" value="{{ form_data.date_of_birth or '' }}">
+        </div>
+        <div class="field">
+          <label for="phone_number">Phone Number</label>
+          <input id="phone_number" name="phone_number" type="text" required value="{{ form_data.phone_number or '' }}" placeholder="+66 xxx xxx xxxx">
+        </div>
+        <div class="field">
+          <label for="email">Email</label>
+          <input id="email" name="email" type="email" required value="{{ form_data.email or '' }}" placeholder="you@example.com">
+        </div>
+        <div class="field">
+          <label for="national_id">National ID</label>
+          <input id="national_id" name="national_id" type="text" value="{{ form_data.national_id or '' }}" placeholder="ID number">
+        </div>
+        <div class="field">
+          <label for="profile_picture">Profile Picture</label>
+          <input id="profile_picture" name="profile_picture" type="file" accept="image/*">
+        </div>
+      </div>
+
+      <!-- Address & Account -->
+      <div class="form-section-title" style="margin-top:24px;"><i class="fa-solid fa-building-columns"></i> Address & Account</div>
+      <div class="form-grid">
+        <div class="field full-row">
+          <label for="address">Address</label>
+          <input id="address" name="address" type="text" value="{{ form_data.address or '' }}" placeholder="Street address">
+        </div>
+        <div class="field">
+          <label for="city">City</label>
+          <input id="city" name="city" type="text" value="{{ form_data.city or '' }}" placeholder="City">
+        </div>
+        <div class="field">
+          <label for="country">Country</label>
+          <input id="country" name="country" type="text" value="{{ form_data.country or '' }}" placeholder="Country">
+        </div>
+        <div class="field">
+          <label for="occupation">Occupation</label>
+          <input id="occupation" name="occupation" type="text" value="{{ form_data.occupation or '' }}" placeholder="Your occupation">
+        </div>
+        <div class="field">
+          <label for="account_type">Account Type</label>
+          <select id="account_type" name="account_type">
+            <option value="Savings">Savings</option>
+            <option value="Checking">Checking</option>
+            <option value="Student">Student</option>
+          </select>
+        </div>
+      </div>
+
+      <button type="submit" class="btn btn-primary btn-full" style="margin-top:24px;">Create Account</button>
+    </form>
+
+    <p class="auth-link">Already have an account? <a href="{{ url_for('login') }}">Sign in</a></p>
+  </div>
+</div>
+{% endblock %}

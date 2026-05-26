@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Profile Header -->
+<div class="balance-hero" style="margin-bottom:24px;">
+  <div style="display:flex;align-items:center;gap:20px;">
+    {% if profile.profile_picture %}
+      <img class="avatar avatar-xl" src="{{ url_for('static', filename='uploads/' ~ profile.profile_picture) }}" alt="Profile picture">
+    {% else %}
+      <div class="avatar avatar-xl">{{ (profile.full_name or profile.username or 'U')[0]|upper }}</div>
+    {% endif %}
+    <div>
+      <div style="font-size:22px;font-weight:800;">{{ profile.full_name }}</div>
+      <div class="muted" style="font-size:14px;margin-top:4px;">@{{ profile.username }} · {{ profile.account_number }}</div>
+      <div style="margin-top:8px;">
+        <span class="badge {% if profile.status == 'active' %}badge-success{% else %}badge-error{% endif %}">{{ profile.status }}</span>
+        <span class="badge badge-muted" style="margin-left:6px;">{{ profile.account_type }}</span>
+      </div>
+    </div>
+  </div>
+  <a href="{{ url_for('edit_profile') }}" class="btn btn-primary"><i class="fa-solid fa-pen-to-square"></i> Edit Profile</a>
+</div>
+
+<!-- Personal Details -->
+<div class="flex-between" style="margin-bottom:14px;">
+  <div class="page-title" style="margin-bottom:0;">Personal Information</div>
+</div>
+<div class="details-grid section-gap">
+  <div class="detail-item"><div class="di-label">Username</div><div class="di-val">{{ profile.username }}</div></div>
+  <div class="detail-item"><div class="di-label">Full Name</div><div class="di-val">{{ profile.full_name }}</div></div>
+  <div class="detail-item"><div class="di-label">Gender</div><div class="di-val">{{ profile.gender or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Date of Birth</div><div class="di-val">{{ profile.date_of_birth or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Phone Number</div><div class="di-val">{{ profile.phone_number }}</div></div>
+  <div class="detail-item"><div class="di-label">Email</div><div class="di-val">{{ profile.email }}</div></div>
+  <div class="detail-item"><div class="di-label">National ID</div><div class="di-val">{{ profile.national_id or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Occupation</div><div class="di-val">{{ profile.occupation or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Address</div><div class="di-val">{{ profile.address or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">City</div><div class="di-val">{{ profile.city or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Country</div><div class="di-val">{{ profile.country or "—" }}</div></div>
+  <div class="detail-item"><div class="di-label">Profile Picture</div><div class="di-val">{{ "Uploaded" if profile.profile_picture else "Initial avatar" }}</div></div>
+</div>
+
+<!-- Account Details -->
+<div class="page-title" style="margin-bottom:14px;">Account Information</div>
+<div class="details-grid">
+  <div class="detail-item"><div class="di-label">Account Number</div><div class="di-val text-cyan">{{ profile.account_number }}</div></div>
+  <div class="detail-item"><div class="di-label">Account Type</div><div class="di-val">{{ profile.account_type }}</div></div>
+  <div class="detail-item"><div class="di-label">Currency</div><div class="di-val">{{ profile.currency }}</div></div>
+  <div class="detail-item"><div class="di-label">Account Status</div><div class="di-val">{{ profile.status }}</div></div>
+  <div class="detail-item"><div class="di-label">Created Date</div><div class="di-val">{{ profile.created_at }}</div></div>
+  <div class="detail-item"><div class="di-label">Last Login</div><div class="di-val">{{ profile.last_login or "—" }}</div></div>
+</div>
+{% endblock %}

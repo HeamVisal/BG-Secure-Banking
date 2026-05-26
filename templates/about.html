@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+
+{% block content %}
+<!-- Hero -->
+<div class="about-hero">
+  <div>
+    <h1>About BG Bank</h1>
+    <p>
+      BG Bank is a class demo banking system built to show how a secure distributed
+      application can separate the web client, authentication service, and banking server
+      into independent processes communicating via RPC.
+    </p>
+    <p>
+      The system uses XML-RPC for service communication, Fernet encryption for login
+      tickets, SQLite for data storage, and rule-based fraud detection for suspicious activity.
+    </p>
+  </div>
+  <img src="{{ url_for('static', filename='bank-image/Full-Image.png') }}" alt="BG Bank">
+</div>
+
+<!-- Feature Cards -->
+<div class="about-cards">
+  <div class="about-card">
+    <div class="ac-icon"><i class="fa-solid fa-bullseye"></i></div>
+    <h2>Our Purpose</h2>
+    <p>BG Bank demonstrates authentication, account management, encrypted tickets, transaction records, audit logs, and thread-safe banking in one project.</p>
+  </div>
+  <div class="about-card">
+    <div class="ac-icon"><i class="fa-solid fa-lock"></i></div>
+    <h2>Security Focus</h2>
+    <p>Login passwords and action passwords are stored as hashes. Sensitive actions like withdrawal and transfer require the action password before money can move.</p>
+  </div>
+  <div class="about-card">
+    <div class="ac-icon"><i class="fa-solid fa-shield-halved"></i></div>
+    <h2>Fraud Detection</h2>
+    <p>Transactions are checked for large amounts, unusual activity, quick balance drops, daily transfer limit violations, and rapid transfers to different receivers.</p>
+  </div>
+  <div class="about-card">
+    <div class="ac-icon"><i class="fa-solid fa-network-wired"></i></div>
+    <h2>Distributed Design</h2>
+    <p>The browser only talks to Flask. Flask calls the Authentication Service (port 8001) and Banking Server (port 8002) through XML-RPC — a true RPC-based architecture.</p>
+  </div>
+</div>
+{% endblock %}
