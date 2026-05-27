@@ -1,3 +1,4 @@
+import os
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
@@ -84,11 +85,13 @@ def main():
     database.init_db()
     security.generate_key_if_not_exists()
 
-    server = ThreadedXMLRPCServer(("127.0.0.1", 8001), allow_none=True, logRequests=True)
+    host = os.environ.get("AUTH_HOST", "127.0.0.1")
+    port = int(os.environ.get("AUTH_PORT", "8001"))
+    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
     server.register_function(register_user, "register_user")
     server.register_function(login, "login")
 
-    print("Authentication Service running on http://127.0.0.1:8001")
+    print(f"Authentication Service running on http://{host}:{port}")
     server.serve_forever()
 
 

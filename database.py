@@ -1,10 +1,12 @@
+import os
 import random
 import sqlite3
 import uuid
 from datetime import datetime, timedelta
 
 
-DB_NAME = "banking.db"
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+DB_NAME = os.path.join(DATA_DIR, "banking.db")
 
 
 def now_text():
@@ -12,6 +14,7 @@ def now_text():
 
 
 def get_connection():
+    os.makedirs(DATA_DIR, exist_ok=True)
     connection = sqlite3.connect(DB_NAME, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     return connection
