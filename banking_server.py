@@ -1,3 +1,4 @@
+import os
 import threading
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
@@ -330,7 +331,9 @@ def main():
     database.init_db()
     security.generate_key_if_not_exists()
 
-    server = ThreadedXMLRPCServer(("127.0.0.1", 8002), allow_none=True, logRequests=True)
+    host = os.environ.get("BANK_HOST", "127.0.0.1")
+    port = int(os.environ.get("BANK_PORT", "8002"))
+    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
     for function in [
         get_balance,
         deposit,
@@ -348,7 +351,7 @@ def main():
     ]:
         server.register_function(function, function.__name__)
 
-    print("Banking Server running on http://127.0.0.1:8002")
+    print(f"Banking Server running on http://{host}:{port}")
     server.serve_forever()
 
 

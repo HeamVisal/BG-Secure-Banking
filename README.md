@@ -230,6 +230,40 @@ pip install -r requirements.txt
 
 ## How to Run
 
+### Run with Docker
+
+Start everything from one terminal:
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://127.0.0.1:5000
+```
+
+Press `Ctrl+C` to stop the services.
+
+To stop and remove the containers:
+
+```bash
+docker compose down
+```
+
+Docker uses the project folder's existing runtime files:
+
+```text
+banking.db
+secret.key
+static/uploads/
+```
+
+To move the same Docker-backed data to another PC, copy those files and folder with the project.
+
+### Run Locally
+
 Open three terminal windows in the project folder.
 
 Terminal 1:

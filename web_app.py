@@ -9,8 +9,8 @@ from werkzeug.utils import secure_filename
 import security
 
 
-AUTH_RPC_URL = "http://127.0.0.1:8001"
-BANK_RPC_URL = "http://127.0.0.1:8002"
+AUTH_RPC_URL = os.environ.get("AUTH_RPC_URL", "http://127.0.0.1:8001")
+BANK_RPC_URL = os.environ.get("BANK_RPC_URL", "http://127.0.0.1:8002")
 
 app = Flask(__name__)
 app.secret_key = security.stable_flask_secret()
@@ -348,4 +348,8 @@ def logout():
 
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    app.run(
+        host=os.environ.get("WEB_HOST", "127.0.0.1"),
+        port=int(os.environ.get("WEB_PORT", "5000")),
+        debug=os.environ.get("FLASK_DEBUG", "1") == "1",
+    )

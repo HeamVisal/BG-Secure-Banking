@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.git/
+.venv/
+banking.db
+secret.key
+static/uploads/

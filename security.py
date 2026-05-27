@@ -17,12 +17,14 @@ from cryptography.fernet import Fernet, InvalidToken  # symmetric encryption and
 from werkzeug.security import check_password_hash, generate_password_hash  # password hashing utilities
 
 
-KEY_FILE = "secret.key"  # filename where the Fernet key is stored
+DATA_DIR = os.environ.get("DATA_DIR", ".")
+KEY_FILE = os.path.join(DATA_DIR, "secret.key")  # filename where the Fernet key is stored
 TOKEN_LIFETIME_MINUTES = 30  # login ticket validity in minutes
 
 
 def generate_key_if_not_exists():
     """Create one shared Fernet key for both RPC servers if it is missing."""
+    os.makedirs(DATA_DIR, exist_ok=True)
     if not os.path.exists(KEY_FILE):  # only generate once
         with open(KEY_FILE, "wb") as key_file:
             key_file.write(Fernet.generate_key())  # write raw Fernet key bytes

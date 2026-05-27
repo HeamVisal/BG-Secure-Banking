@@ -1,0 +1,41 @@
+services:
+  auth:
+    build: .
+    command: python auth_service.py
+    environment:
+      AUTH_HOST: 0.0.0.0
+      DATA_DIR: /data
+    volumes:
+      - ./banking.db:/data/banking.db
+      - ./secret.key:/data/secret.key
+
+  bank:
+    build: .
+    command: python banking_server.py
+    depends_on:
+      - auth
+    environment:
+      BANK_HOST: 0.0.0.0
+      DATA_DIR: /data
+    volumes:
+      - ./banking.db:/data/banking.db
+      - ./secret.key:/data/secret.key
+
+  web:
+    build: .
+    command: python web_app.py
+    depends_on:
+      - auth
+      - bank
+    environment:
+      AUTH_RPC_URL: http://auth:8001
+      BANK_RPC_URL: http://bank:8002
+      DATA_DIR: /data
+      FLASK_DEBUG: 0
+      WEB_HOST: 0.0.0.0
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./banking.db:/data/banking.db
+      - ./secret.key:/data/secret.key
+      - ./static/uploads:/app/static/uploads
