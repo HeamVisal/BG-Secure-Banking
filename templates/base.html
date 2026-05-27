@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
-<body>
+<body class="{% if session.get('ticket') %}app-body{% else %}public-body{% endif %}">
 
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% for category, message in messages %}
@@ -48,15 +48,15 @@
     <span>BG Bank</span>
   </a>
   <nav class="public-nav">
-    <a href="{{ url_for('about') }}">About Us</a>
-    <a href="{{ url_for('login') }}">Login</a>
-    <a href="{{ url_for('register') }}">Register</a>
+    <a class="{% if request.endpoint == 'about' %}active{% endif %}" href="{{ url_for('about') }}">About Us</a>
+    <a class="{% if request.endpoint == 'login' %}active{% endif %}" href="{{ url_for('login') }}">Login</a>
+    <a class="{% if request.endpoint == 'register' %}active{% endif %}" href="{{ url_for('register') }}">Register</a>
   </nav>
 </header>
 {% endif %}
 
 <div class="{% if session.get('ticket') %}content-wrapper{% endif %}">
-  <main class="{% if session.get('ticket') %}main-content{% else %}public-content{% endif %}">
+  <main class="{% if session.get('ticket') %}main-content{% else %}public-content{% endif %}{% if request.endpoint in ['login', 'register'] %} auth-public-content{% endif %}">
     {% block content %}{% endblock %}
   </main>
 </div>

@@ -74,6 +74,7 @@ def calculate_user_risk_score(username):
                     reasons.append(reason)
 
     return {
+        "fraud_flag": 1 if suspicious else 0,
         "risk_score": score,
         "reasons": reasons,
         "suspicious_transactions": suspicious,

@@ -229,6 +229,16 @@ def detect_fraud(ticket):
     return response(True, "Fraud report loaded", fraud_detection.calculate_user_risk_score(username))
 
 
+def trust_fraud_report(ticket):
+    username = _username_from_ticket(ticket)
+    if not username:
+        return response(False, "Invalid or expired token")
+
+    trusted_count = database.trust_suspicious_transactions(username)
+    database.add_audit_log(username, "TRUST_FRAUD_REPORT", f"Trusted and reset {trusted_count} suspicious transaction risk flags")
+    return response(True, f"Trusted {trusted_count} suspicious transaction(s). Risk report reset.", {"trusted_count": trusted_count})
+
+
 def get_risk_score(ticket):
     username = _username_from_ticket(ticket)
     if not username:
@@ -328,6 +338,7 @@ def main():
         transfer,
         view_transaction_history,
         detect_fraud,
+        trust_fraud_report,
         get_risk_score,
         get_user_profile,
         update_user_profile,

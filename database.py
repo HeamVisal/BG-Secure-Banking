@@ -500,6 +500,28 @@ def get_daily_transfer_total(username):
     return float(row["total"]) if row else 0.0
 
 
+def trust_suspicious_transactions(username):
+    connection = get_connection()
+    cursor = connection.cursor()
+    cursor.execute(
+        """
+        UPDATE transactions
+        SET fraud_flag = 0,
+            risk_score = 0,
+            reason = CASE
+                WHEN reason IS NULL OR reason = '' THEN 'Trusted by customer review'
+                ELSE reason || '; Trusted by customer review'
+            END
+        WHERE username = ? AND (fraud_flag = 1 OR risk_score > 0)
+        """,
+        (username,),
+    )
+    changed = cursor.rowcount
+    connection.commit()
+    connection.close()
+    return changed
+
+
 def count_transactions(username):
     connection = get_connection()
     cursor = connection.cursor()

@@ -266,6 +266,15 @@ def history():
     return render_template("history.html", transactions=transactions)
 
 
+@app.route("/fraud/trust", methods=["POST"])
+def trust_fraud():
+    if not require_login():
+        return redirect(url_for("login"))
+    result = call_bank("trust_fraud_report")
+    flash(result["message"], "success" if result["success"] else "error")
+    return redirect(url_for("fraud"))
+
+
 @app.route("/fraud")
 def fraud():
     if not require_login():

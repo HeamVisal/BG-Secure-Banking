@@ -6,6 +6,11 @@
     <div class="page-title">Fraud Report</div>
     <div class="page-sub">Rule-based detection result from the Banking Server.</div>
   </div>
+  <form method="post" action="{{ url_for('trust_fraud') }}">
+    <button type="submit" class="btn btn-ghost" {% if not report.fraud_flag and not report.suspicious_transactions and not report.risk_score %}disabled{% endif %}>
+      <i class="fa-solid fa-shield-halved"></i> Trust
+    </button>
+  </form>
 </div>
 
 <!-- Risk Score + Summary row -->
