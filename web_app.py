@@ -6,11 +6,13 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
+from app_logging import get_logger, log_event, sensitive_fields, summarize_token
 import security
 
 
 AUTH_RPC_URL = os.environ.get("AUTH_RPC_URL", "http://127.0.0.1:8001")
 BANK_RPC_URL = os.environ.get("BANK_RPC_URL", "http://127.0.0.1:8002")
+logger = get_logger("WEB")
 
 app = Flask(__name__)
 app.secret_key = security.stable_flask_secret()
@@ -36,25 +38,49 @@ def current_ticket():
 def require_login():
     ticket = current_ticket()
     if not ticket:
+        log_event(logger, "session_missing")
         flash("Please log in first.", "error")
         return False
     try:
         if not security.decrypt_ticket(ticket):
             session.clear()
+            log_event(logger, "session_expired_or_invalid")
             flash("Your session has expired. Please log in again.", "error")
             return False
     except Exception:
         session.clear()
+        log_event(logger, "session_error")
         flash("Session error. Please log in again.", "error")
         return False
     return True
 
 
 def call_bank(method_name, *args):
+    username = session.get("username")
+    log_event(
+        logger,
+        "rpc_request",
+        direction="WEB->BANK",
+        method=method_name,
+        user=username,
+        **summarize_token(current_ticket()),
+        **sensitive_fields(full_encrypted_ticket=current_ticket()),
+    )
     try:
         method = getattr(bank_rpc(), method_name)
-        return method(current_ticket(), *args)
+        result = method(current_ticket(), *args)
+        log_event(
+            logger,
+            "rpc_response",
+            direction="WEB<-BANK",
+            method=method_name,
+            user=username,
+            success=result.get("success"),
+            message=result.get("message"),
+        )
+        return result
     except (OSError, Fault, ProtocolError) as error:
+        log_event(logger, "rpc_error", direction="WEB<-BANK", method=method_name, user=username, error=error)
         return {"success": False, "message": f"Banking Server error: {error}", "data": {}}
 
 
@@ -132,8 +158,11 @@ def register():
             return render_template("register.html", form_data=form_data)
         form_data["profile_picture"] = save_profile_picture(request.files.get("profile_picture"))
         try:
+            log_event(logger, "rpc_request", direction="WEB->AUTH", method="register_user", user=form_data.get("username"))
             result = auth_rpc().register_user(form_data)
+            log_event(logger, "rpc_response", direction="WEB<-AUTH", method="register_user", user=form_data.get("username"), success=result.get("success"), message=result.get("message"))
         except OSError:
+            log_event(logger, "rpc_error", direction="WEB<-AUTH", method="register_user", user=form_data.get("username"), error="service_unavailable")
             result = {"success": False, "message": "Authentication Service is not running.", "data": {}}
 
         flash(result["message"], "success" if result["success"] else "error")
@@ -149,14 +178,35 @@ def login():
         username = request.form.get("username", "")
         password = request.form.get("password", "")
         try:
+            log_event(logger, "rpc_request", direction="WEB->AUTH", method="login", user=username)
             result = auth_rpc().login(username, password)
+            ticket = result.get("data", {}).get("ticket")
+            log_event(
+                logger,
+                "rpc_response",
+                direction="WEB<-AUTH",
+                method="login",
+                user=username,
+                success=result.get("success"),
+                message=result.get("message"),
+                **summarize_token(ticket),
+                **sensitive_fields(full_encrypted_ticket=ticket),
+            )
         except OSError:
+            log_event(logger, "rpc_error", direction="WEB<-AUTH", method="login", user=username, error="service_unavailable")
             result = {"success": False, "message": "Authentication Service is not running.", "data": {}}
 
         flash(result["message"], "success" if result["success"] else "error")
         if result["success"]:
             session["ticket"] = result["data"]["ticket"]
             session["username"] = result["data"]["username"]
+            log_event(
+                logger,
+                "session_ticket_stored",
+                user=session["username"],
+                **summarize_token(session["ticket"]),
+                **sensitive_fields(full_encrypted_ticket=session["ticket"]),
+            )
             return redirect(url_for("dashboard"))
 
     return render_template("login.html")
@@ -342,6 +392,7 @@ def edit_profile():
 
 @app.route("/logout")
 def logout():
+    log_event(logger, "logout", user=session.get("username"))
     session.clear()
     flash("Logged out successfully.", "success")
     return redirect(url_for("login"))

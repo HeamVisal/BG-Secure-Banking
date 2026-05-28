@@ -3,11 +3,13 @@ import threading
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
+from app_logging import get_logger, log_event, sensitive_fields, summarize_token
 import database
 import fraud_detection
 import security
 
 
+logger = get_logger("BANK_RPC")
 bank_lock = threading.Lock()
 
 
@@ -22,8 +24,19 @@ def response(success, message, data=None):
 def _username_from_ticket(ticket):
     data = security.decrypt_ticket(ticket)
     if not data:
+        log_event(logger, "ticket_invalid", **summarize_token(ticket), **sensitive_fields(full_encrypted_ticket=ticket))
         return None
-    return data.get("username")
+    username = data.get("username")
+    log_event(
+        logger,
+        "ticket_valid",
+        user=username,
+        issue_time=data.get("issue_time"),
+        expiry_time=data.get("expiry_time"),
+        **summarize_token(ticket),
+        **sensitive_fields(full_encrypted_ticket=ticket),
+    )
+    return username
 
 
 def _clean_amount(amount):
@@ -37,11 +50,15 @@ def _clean_amount(amount):
 def _verify_action_password(username, action_password):
     user = database.get_user(username)
     if not user:
+        log_event(logger, "action_password_failed", user=username, reason="User not found")
         return False, "User not found"
     if not user.get("action_password_hash"):
+        log_event(logger, "action_password_failed", user=username, reason="Action password is not set")
         return False, "Action password is not set. Please register a new demo account or reset the database."
     if not security.verify_password(action_password, user["action_password_hash"]):
+        log_event(logger, "action_password_failed", user=username, reason="Invalid action password")
         return False, "Invalid action password"
+    log_event(logger, "action_password_verified", user=username)
     return True, ""
 
 
@@ -55,7 +72,7 @@ def _account_or_error(username):
 
 
 def _record_transaction(username, transaction_type, amount, receiver_username, status, risk, reason, account, balance_before, balance_after, receiver_account=None):
-    database.add_transaction(
+    transaction_row_id = database.add_transaction(
         username=username,
         transaction_type=transaction_type,
         amount=amount,
@@ -69,6 +86,18 @@ def _record_transaction(username, transaction_type, amount, receiver_username, s
         receiver_account_number=receiver_account.get("account_number") if receiver_account else None,
         balance_before=balance_before,
         balance_after=balance_after,
+    )
+    log_event(
+        logger,
+        "transaction_recorded",
+        row_id=transaction_row_id,
+        user=username,
+        type=transaction_type,
+        amount=f"{float(amount):.2f}",
+        status=status,
+        receiver=receiver_username,
+        risk_score=risk.get("risk_score", 0),
+        fraud_flag=risk.get("fraud_flag", 0),
     )
 
 
@@ -89,6 +118,7 @@ def deposit(ticket, amount):
     if not username:
         return response(False, "Invalid or expired token")
 
+    log_event(logger, "deposit_request", user=username, amount=amount)
     amount = _clean_amount(amount)
     if amount is None:
         account = database.get_account(username)
@@ -105,9 +135,11 @@ def deposit(ticket, amount):
         balance_after = balance_before + amount
         risk = fraud_detection.check_transaction_risk(username, "DEPOSIT", amount, balance_before, balance_after, account=account)
         database.update_balance(username, balance_after)
+        log_event(logger, "balance_updated", user=username, before=f"{balance_before:.2f}", after=f"{balance_after:.2f}")
         _record_transaction(username, "DEPOSIT", amount, None, "success", risk, "", account, balance_before, balance_after)
         database.add_audit_log(username, "DEPOSIT", f"Deposited {amount:.2f} {account['currency']}")
 
+    log_event(logger, "deposit_success", user=username, balance=f"{balance_after:.2f}", risk_score=risk.get("risk_score", 0), fraud_flag=risk.get("fraud_flag", 0))
     return response(True, "Deposit successful", {"balance": balance_after, "risk": risk})
 
 
@@ -116,6 +148,7 @@ def withdraw(ticket, amount, action_password):
     if not username:
         return response(False, "Invalid or expired token")
 
+    log_event(logger, "withdraw_request", user=username, amount=amount)
     amount = _clean_amount(amount)
     if amount is None:
         account = database.get_account(username)
@@ -143,9 +176,11 @@ def withdraw(ticket, amount, action_password):
         balance_after = balance_before - amount
         risk = fraud_detection.check_transaction_risk(username, "WITHDRAW", amount, balance_before, balance_after, account=account)
         database.update_balance(username, balance_after)
+        log_event(logger, "balance_updated", user=username, before=f"{balance_before:.2f}", after=f"{balance_after:.2f}")
         _record_transaction(username, "WITHDRAW", amount, None, "success", risk, "", account, balance_before, balance_after)
         database.add_audit_log(username, "WITHDRAW", f"Withdrew {amount:.2f} {account['currency']}")
 
+    log_event(logger, "withdraw_success", user=username, balance=f"{balance_after:.2f}", risk_score=risk.get("risk_score", 0), fraud_flag=risk.get("fraud_flag", 0))
     return response(True, "Withdrawal successful", {"balance": balance_after, "risk": risk})
 
 
@@ -155,6 +190,7 @@ def transfer(ticket, receiver_username, amount, action_password):
         return response(False, "Invalid or expired token")
 
     receiver_username = receiver_username.strip().lower()
+    log_event(logger, "transfer_request", user=username, receiver=receiver_username, amount=amount)
     amount = _clean_amount(amount)
     if amount is None:
         account = database.get_account(username)
@@ -208,11 +244,14 @@ def transfer(ticket, receiver_username, amount, action_password):
         )
         database.update_balance(username, sender_after)
         database.update_balance(receiver_username, receiver_after)
+        log_event(logger, "balance_updated", user=username, before=f"{sender_before:.2f}", after=f"{sender_after:.2f}")
+        log_event(logger, "balance_updated", user=receiver_username, before=f"{receiver_before:.2f}", after=f"{receiver_after:.2f}")
         _record_transaction(username, "TRANSFER_OUT", amount, receiver_username, "success", risk, "", sender_account, sender_before, sender_after, receiver_account)
         _record_transaction(receiver_username, "TRANSFER_IN", amount, username, "success", {"fraud_flag": 0, "risk_score": 0}, "Money received from transfer", receiver_account, receiver_before, receiver_after, sender_account)
         database.add_audit_log(username, "TRANSFER_OUT", f"Transferred {amount:.2f} {sender_account['currency']} to {receiver_username}")
         database.add_audit_log(receiver_username, "TRANSFER_IN", f"Received {amount:.2f} {receiver_account['currency']} from {username}")
 
+    log_event(logger, "transfer_success", user=username, receiver=receiver_username, balance=f"{sender_after:.2f}", risk_score=risk.get("risk_score", 0), fraud_flag=risk.get("fraud_flag", 0))
     return response(True, "Transfer successful", {"balance": sender_after, "risk": risk})
 
 
@@ -227,7 +266,9 @@ def detect_fraud(ticket):
     username = _username_from_ticket(ticket)
     if not username:
         return response(False, "Invalid or expired token")
-    return response(True, "Fraud report loaded", fraud_detection.calculate_user_risk_score(username))
+    report = fraud_detection.calculate_user_risk_score(username)
+    log_event(logger, "fraud_report_loaded", user=username, risk_score=report["risk_score"], fraud_flag=report["fraud_flag"], suspicious_count=len(report["suspicious_transactions"]))
+    return response(True, "Fraud report loaded", report)
 
 
 def trust_fraud_report(ticket):
@@ -237,6 +278,7 @@ def trust_fraud_report(ticket):
 
     trusted_count = database.trust_suspicious_transactions(username)
     database.add_audit_log(username, "TRUST_FRAUD_REPORT", f"Trusted and reset {trusted_count} suspicious transaction risk flags")
+    log_event(logger, "fraud_report_trusted", user=username, trusted_count=trusted_count)
     return response(True, f"Trusted {trusted_count} suspicious transaction(s). Risk report reset.", {"trusted_count": trusted_count})
 
 
@@ -334,6 +376,7 @@ def main():
     host = os.environ.get("BANK_HOST", "127.0.0.1")
     port = int(os.environ.get("BANK_PORT", "8002"))
     server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
+    log_event(logger, "service_start", url=f"http://{host}:{port}")
     for function in [
         get_balance,
         deposit,

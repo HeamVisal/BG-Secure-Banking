@@ -3,6 +3,7 @@ services:
     build: .
     command: python auth_service.py
     environment:
+      APP_LOG_SENSITIVE: "1"
       AUTH_HOST: 0.0.0.0
       DATA_DIR: /data
     volumes:
@@ -15,6 +16,7 @@ services:
     depends_on:
       - auth
     environment:
+      APP_LOG_SENSITIVE: "1"
       BANK_HOST: 0.0.0.0
       DATA_DIR: /data
     volumes:
@@ -28,6 +30,7 @@ services:
       - auth
       - bank
     environment:
+      APP_LOG_SENSITIVE: "1"
       AUTH_RPC_URL: http://auth:8001
       BANK_RPC_URL: http://bank:8002
       DATA_DIR: /data
