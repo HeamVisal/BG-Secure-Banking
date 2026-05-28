@@ -1,9 +1,14 @@
+import hashlib
 import os
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
+from app_logging import get_logger, log_event, sensitive_fields, summarize_token
 import database
 import security
+
+
+logger = get_logger("AUTH_RPC")
 
 
 class ThreadedXMLRPCServer(ThreadingMixIn, SimpleXMLRPCServer):
@@ -37,13 +42,25 @@ def _validate_registration(data):
 def register_user(registration_data):
     username = registration_data.get("username", "").strip().lower()
     registration_data["username"] = username
+    log_event(logger, "register_request", user=username)
     error = _validate_registration(registration_data)
     if error:
+        log_event(logger, "register_rejected", user=username, reason=error)
         return response(False, error)
 
     password_hash = security.hash_password(registration_data["password"])
     action_password_hash = security.hash_password(registration_data["action_password"])
+    log_event(
+        logger,
+        "passwords_hashed",
+        user=username,
+        **sensitive_fields(
+            login_password_hash=password_hash,
+            action_password_hash=action_password_hash,
+        ),
+    )
     if not database.create_user(username, password_hash, action_password_hash):
+        log_event(logger, "register_rejected", user=username, reason="Username already exists")
         return response(False, "Username already exists")
 
     profile_data = {
@@ -62,22 +79,46 @@ def register_user(registration_data):
     database.create_customer_profile(username, profile_data)
     database.create_account(username, registration_data.get("account_type", "Savings"))
     database.add_audit_log(username, "REGISTER", "Customer registered and account created")
+    log_event(logger, "register_success", user=username)
     return response(True, "Registration successful")
 
 
 def login(username, password):
     username = username.strip().lower()
+    log_event(logger, "login_request", user=username)
     user = database.get_user(username)
+    log_event(
+        logger,
+        "login_credentials_received",
+        user=username,
+        **sensitive_fields(
+            submitted_password_sha256=hashlib.sha256(password.encode("utf-8")).hexdigest(),
+            stored_password_hash=user.get("password_hash") if user else "missing_user",
+        ),
+    )
     if not user or not security.verify_password(password, user["password_hash"]):
         database.add_audit_log(username, "LOGIN_FAILED", "Invalid username or password")
+        log_event(logger, "login_failed", user=username, reason="Invalid username or password")
         return response(False, "Invalid username or password")
     if user.get("status") != "active":
         database.add_audit_log(username, "LOGIN_BLOCKED", "User status is not active")
+        log_event(logger, "login_blocked", user=username, status=user.get("status"))
         return response(False, "User account is not active")
 
     database.update_last_login(username)
     database.add_audit_log(username, "LOGIN_SUCCESS", "User logged in")
     ticket = security.create_login_ticket(username)
+    ticket_data = security.decrypt_ticket(ticket) or {}
+    log_event(
+        logger,
+        "ticket_issued",
+        user=username,
+        issue_time=ticket_data.get("issue_time"),
+        expiry_time=ticket_data.get("expiry_time"),
+        **summarize_token(ticket),
+        **sensitive_fields(full_encrypted_ticket=ticket),
+    )
+    log_event(logger, "login_success", user=username)
     return response(True, "Login successful", {"ticket": ticket, "username": username})
 
 
@@ -88,6 +129,7 @@ def main():
     host = os.environ.get("AUTH_HOST", "127.0.0.1")
     port = int(os.environ.get("AUTH_PORT", "8001"))
     server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
+    log_event(logger, "service_start", url=f"http://{host}:{port}")
     server.register_function(register_user, "register_user")
     server.register_function(login, "login")
 

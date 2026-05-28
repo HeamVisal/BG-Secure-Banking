@@ -124,6 +124,38 @@ Methods:
 
 All Banking Server methods validate the encrypted ticket before loading or changing account data.
 
+## RPC and Research Logging
+
+The project includes structured console logging so the XML-RPC flow is visible during a demo or research presentation. Logs are written by component:
+
+- `[WEB]` shows browser-facing Flask actions and outgoing RPC calls to `auth` and `bank`.
+- `[AUTH_RPC]` shows registration, login, password hashing, and encrypted ticket creation.
+- `[BANK_RPC]` shows ticket validation, action password checks, balance changes, and banking operations.
+- `[FRAUD]` shows fraud/risk rule evaluation and user risk summaries.
+- `[DB]` shows important database writes such as users, accounts, transactions, and audit logs.
+
+Docker Compose enables research logging with:
+
+```yaml
+APP_LOG_SENSITIVE: "1"
+```
+
+With this flag enabled, logs may include usernames, generated password hashes, submitted password SHA-256 fingerprints, full encrypted Fernet tickets, ticket issue/expiry times, transaction amounts, balance changes, and fraud scores. This is useful for showing how data moves across the RPC services.
+
+This mode is for research and demonstration only. In a production-style deployment, set `APP_LOG_SENSITIVE` to `0` or remove it so full encrypted tickets and credential-related details are not printed.
+
+Example combined flow:
+
+```text
+[WEB] rpc_request direction=WEB->AUTH method=login user=alice
+[AUTH_RPC] login_credentials_received user=alice stored_password_hash=scrypt:...
+[AUTH_RPC] ticket_issued user=alice full_encrypted_ticket=gAAAAA...
+[WEB] rpc_request direction=WEB->BANK method=get_dashboard_summary user=alice full_encrypted_ticket=gAAAAA...
+[BANK_RPC] ticket_valid user=alice issue_time=... expiry_time=...
+[FRAUD] user_risk_calculated user=alice risk_score=0 fraud_flag=0
+[WEB] rpc_response direction=WEB<-BANK method=get_dashboard_summary success=True
+```
+
 ## Database Schema
 
 The project uses SQLite with the database file `banking.db`.
@@ -164,6 +196,7 @@ id, username, action, details, ip_address, created_at
 - Banking Server RPC methods reject invalid or expired tickets.
 - Withdraw and transfer operations are protected by an action password.
 - Local secrets and runtime files such as `secret.key` and `banking.db` are ignored by Git.
+- Docker Compose enables sensitive research logging with `APP_LOG_SENSITIVE: "1"`; disable this outside demos.
 
 ## Fraud Detection
 
@@ -244,7 +277,15 @@ Then open:
 http://127.0.0.1:5000
 ```
 
-Press `Ctrl+C` to stop the services.
+Docker Desktop can show the combined Compose logs for `auth`, `bank`, and `web`. This is the best view for following the full RPC story. From a terminal, the equivalent command is:
+
+```bash
+docker compose logs -f web auth bank
+```
+
+You do not need this command if Docker Desktop is already showing the combined Compose logs.
+
+Press `Ctrl+C` to stop the services when running Compose from a terminal.
 
 To stop and remove the containers:
 

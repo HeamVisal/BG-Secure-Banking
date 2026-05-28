@@ -1,4 +1,8 @@
+from app_logging import get_logger, log_event
 import database
+
+
+logger = get_logger("FRAUD")
 
 
 def check_transaction_risk(
@@ -54,8 +58,19 @@ def check_transaction_risk(
             risk_score += 25
 
     risk_score = min(risk_score, 100)
+    fraud_flag = 1 if risk_score >= 25 else 0
+    log_event(
+        logger,
+        "transaction_risk_checked",
+        user=username,
+        type=transaction_type,
+        amount=f"{float(amount):.2f}",
+        risk_score=risk_score,
+        fraud_flag=fraud_flag,
+        reasons="; ".join(reasons),
+    )
     return {
-        "fraud_flag": 1 if risk_score >= 25 else 0,
+        "fraud_flag": fraud_flag,
         "risk_score": risk_score,
         "reasons": reasons,
     }
@@ -73,8 +88,18 @@ def calculate_user_risk_score(username):
                 if reason and reason not in reasons:
                     reasons.append(reason)
 
+    fraud_flag = 1 if suspicious else 0
+    log_event(
+        logger,
+        "user_risk_calculated",
+        user=username,
+        risk_score=score,
+        fraud_flag=fraud_flag,
+        suspicious_count=len(suspicious),
+        reasons="; ".join(reasons),
+    )
     return {
-        "fraud_flag": 1 if suspicious else 0,
+        "fraud_flag": fraud_flag,
         "risk_score": score,
         "reasons": reasons,
         "suspicious_transactions": suspicious,

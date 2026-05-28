@@ -4,6 +4,11 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta
 
+from app_logging import get_logger, log_event
+
+
+logger = get_logger("DB")
+
 
 DATA_DIR = os.environ.get("DATA_DIR", ".")
 DB_NAME = os.path.join(DATA_DIR, "banking.db")
@@ -194,6 +199,7 @@ def init_db():
 
     connection.commit()
     connection.close()
+    log_event(logger, "database_initialized", path=DB_NAME)
 
 
 def create_user(username, password_hash, action_password_hash, role="customer", status="active"):
@@ -208,8 +214,10 @@ def create_user(username, password_hash, action_password_hash, role="customer", 
             (username, password_hash, action_password_hash, role, status, now_text(), None),
         )
         connection.commit()
+        log_event(logger, "user_created", user=username, role=role, status=status)
         return True
     except sqlite3.IntegrityError:
+        log_event(logger, "user_create_failed", user=username, reason="duplicate")
         return False
     finally:
         connection.close()
@@ -262,6 +270,7 @@ def create_customer_profile(username, profile_data):
     )
     connection.commit()
     connection.close()
+    log_event(logger, "profile_created", user=username)
 
 
 def get_customer_profile(username):
@@ -315,6 +324,7 @@ def update_customer_profile(username, profile_data):
     connection.commit()
     changed = cursor.rowcount > 0
     connection.close()
+    log_event(logger, "profile_updated", user=username, changed=changed)
     return changed
 
 
@@ -333,8 +343,10 @@ def create_account(username, account_type="Savings"):
             (generate_account_number(), username, account_type, 0.0, "USD", "active", 1000.0, created_at, created_at),
         )
         connection.commit()
+        log_event(logger, "account_created", user=username, account_type=account_type)
         return True
     except sqlite3.IntegrityError:
+        log_event(logger, "account_create_failed", user=username, reason="duplicate")
         return False
     finally:
         connection.close()
@@ -364,6 +376,7 @@ def update_balance(username, new_balance):
     connection.commit()
     changed = cursor.rowcount > 0
     connection.close()
+    log_event(logger, "balance_saved", user=username, balance=f"{float(new_balance):.2f}", changed=changed)
     return changed
 
 
@@ -413,6 +426,7 @@ def add_transaction(
     connection.commit()
     transaction_row_id = cursor.lastrowid
     connection.close()
+    log_event(logger, "transaction_saved", row_id=transaction_row_id, user=username, type=transaction_type, status=status, amount=f"{float(amount):.2f}", fraud_flag=fraud_flag, risk_score=risk_score)
     return transaction_row_id
 
 
@@ -522,6 +536,7 @@ def trust_suspicious_transactions(username):
     changed = cursor.rowcount
     connection.commit()
     connection.close()
+    log_event(logger, "suspicious_transactions_trusted", user=username, changed=changed)
     return changed
 
 
@@ -546,6 +561,7 @@ def add_audit_log(username, action, details="", ip_address="RPC"):
     )
     connection.commit()
     connection.close()
+    log_event(logger, "audit_log_saved", user=username, action=action)
 
 
 def get_audit_logs(username, limit=50):
