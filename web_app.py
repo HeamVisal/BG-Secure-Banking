@@ -6,7 +6,7 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
-from app_logging import get_logger, log_event, sensitive_fields, summarize_token
+from app_logging import get_logger, log_event, sensitive_fields, summarize_token, workflow_fields
 import security
 
 
@@ -88,17 +88,34 @@ def _form_dict():
     return {key: request.form.get(key, "").strip() for key in request.form.keys()}
 
 
+def log_browser_action(action, **fields):
+    log_event(
+        logger,
+        "browser_action",
+        action=action,
+        method=request.method,
+        path=request.path,
+        user=session.get("username"),
+        form_fields=sorted(request.form.keys()),
+        uploaded_files=sorted(name for name, file in request.files.items() if file and file.filename),
+        **fields,
+    )
+
+
 def _valid_email(email):
     return "@" in email and "." in email.split("@")[-1]
 
 
 def save_profile_picture(file_storage):
     if not file_storage or not file_storage.filename:
+        log_event(logger, "profile_picture_step", **workflow_fields("01", "no_file_uploaded"))
         return ""
 
     filename = secure_filename(file_storage.filename)
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    log_event(logger, "profile_picture_step", **workflow_fields("02", "validate_upload_extension", original_filename=file_storage.filename, secured_filename=filename, extension=extension))
     if extension not in ALLOWED_IMAGE_EXTENSIONS:
+        log_event(logger, "profile_picture_rejected", reason="extension_not_allowed", extension=extension)
         return ""
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
@@ -107,12 +124,15 @@ def save_profile_picture(file_storage):
 
     try:
         image = Image.open(file_storage.stream)
+        log_event(logger, "profile_picture_step", **workflow_fields("03", "image_opened", format=image.format, size=image.size, mode=image.mode))
         image = ImageOps.exif_transpose(image)
         image = ImageOps.fit(image, PROFILE_IMAGE_SIZE, method=Image.Resampling.LANCZOS)
         image = image.convert("RGB")
         image.save(saved_path, "JPEG", quality=90, optimize=True)
+        log_event(logger, "profile_picture_step", **workflow_fields("04", "image_saved", saved_name=saved_name, saved_path=saved_path, size=PROFILE_IMAGE_SIZE))
         return saved_name
-    except OSError:
+    except OSError as error:
+        log_event(logger, "profile_picture_failed", error=error)
         return ""
 
 
@@ -150,8 +170,11 @@ def index():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     form_data = {}
+    log_browser_action("register_page_entered")
     if request.method == "POST":
         form_data = _form_dict()
+        log_browser_action("register_form_submitted", submitted_data=form_data)
+        log_event(logger, "register_browser_step", **workflow_fields("01", "validate_registration_before_rpc", user=form_data.get("username")))
         error = validate_registration(form_data)
         if error:
             flash(error, "error")
@@ -159,6 +182,7 @@ def register():
         form_data["profile_picture"] = save_profile_picture(request.files.get("profile_picture"))
         try:
             log_event(logger, "rpc_request", direction="WEB->AUTH", method="register_user", user=form_data.get("username"))
+            log_event(logger, "register_browser_step", **workflow_fields("02", "send_registration_to_auth_rpc", user=form_data.get("username"), payload=form_data))
             result = auth_rpc().register_user(form_data)
             log_event(logger, "rpc_response", direction="WEB<-AUTH", method="register_user", user=form_data.get("username"), success=result.get("success"), message=result.get("message"))
         except OSError:
@@ -174,11 +198,14 @@ def register():
 
 @app.route("/login", methods=["GET", "POST"])
 def login():
+    log_browser_action("login_page_entered")
     if request.method == "POST":
         username = request.form.get("username", "")
         password = request.form.get("password", "")
+        log_browser_action("login_form_submitted", username=username, password_length=len(password))
         try:
             log_event(logger, "rpc_request", direction="WEB->AUTH", method="login", user=username)
+            log_event(logger, "login_browser_step", **workflow_fields("01", "send_credentials_to_auth_rpc", user=username, password_length=len(password)))
             result = auth_rpc().login(username, password)
             ticket = result.get("data", {}).get("ticket")
             log_event(
@@ -214,9 +241,11 @@ def login():
 
 @app.route("/dashboard")
 def dashboard():
+    log_browser_action("dashboard_page_entered")
     if not require_login():
         return redirect(url_for("login"))
 
+    log_event(logger, "dashboard_browser_step", **workflow_fields("01", "request_dashboard_summary_from_bank"))
     result = call_bank("get_dashboard_summary")
     if not result["success"]:
         flash(result["message"], "error")
@@ -242,13 +271,16 @@ def dashboard():
 
 @app.route("/deposit", methods=["GET", "POST"])
 def deposit():
+    log_browser_action("deposit_page_entered")
     if not require_login():
         return redirect(url_for("login"))
     if request.method == "POST":
         amount = request.form.get("amount", "0")
+        log_browser_action("deposit_form_submitted", amount=amount)
         if not validate_amount(amount):
             flash("Amount must be greater than zero", "error")
             return render_template("deposit.html")
+        log_event(logger, "deposit_browser_step", **workflow_fields("01", "call_bank_deposit_rpc", amount=amount))
         result = call_bank("deposit", amount)
         flash(result["message"], "success" if result["success"] else "error")
         if result["success"]:
@@ -258,17 +290,21 @@ def deposit():
 
 @app.route("/withdraw", methods=["GET", "POST"])
 def withdraw():
+    log_browser_action("withdraw_page_entered")
     if not require_login():
         return redirect(url_for("login"))
     if request.method == "POST":
         amount = request.form.get("amount", "0")
+        log_browser_action("withdraw_form_submitted", amount=amount)
         if not validate_amount(amount):
             flash("Amount must be greater than zero", "error")
             return render_template("withdraw.html")
         action_password = request.form.get("action_password", "")
+        log_event(logger, "withdraw_browser_step", **workflow_fields("01", "action_password_collected", password_length=len(action_password)))
         if not action_password:
             flash("Action password is required for withdrawal", "error")
             return render_template("withdraw.html")
+        log_event(logger, "withdraw_browser_step", **workflow_fields("02", "call_bank_withdraw_rpc", amount=amount, action_password_length=len(action_password)))
         result = call_bank("withdraw", amount, action_password)
         flash(result["message"], "success" if result["success"] else "error")
         if result["success"]:
@@ -278,11 +314,13 @@ def withdraw():
 
 @app.route("/transfer", methods=["GET", "POST"])
 def transfer():
+    log_browser_action("transfer_page_entered")
     if not require_login():
         return redirect(url_for("login"))
     if request.method == "POST":
         receiver = request.form.get("receiver_username", "").strip()
         amount = request.form.get("amount", "0")
+        log_browser_action("transfer_form_submitted", receiver=receiver, amount=amount)
         if not receiver:
             flash("Receiver username is required", "error")
             return render_template("transfer.html")
@@ -293,9 +331,11 @@ def transfer():
             flash("Amount must be greater than zero", "error")
             return render_template("transfer.html")
         action_password = request.form.get("action_password", "")
+        log_event(logger, "transfer_browser_step", **workflow_fields("01", "action_password_collected", password_length=len(action_password)))
         if not action_password:
             flash("Action password is required for transfer", "error")
             return render_template("transfer.html")
+        log_event(logger, "transfer_browser_step", **workflow_fields("02", "call_bank_transfer_rpc", receiver=receiver, amount=amount, action_password_length=len(action_password)))
         result = call_bank("transfer", receiver, amount, action_password)
         flash(result["message"], "success" if result["success"] else "error")
         if result["success"]:
@@ -305,8 +345,10 @@ def transfer():
 
 @app.route("/history")
 def history():
+    log_browser_action("history_page_entered")
     if not require_login():
         return redirect(url_for("login"))
+    log_event(logger, "history_browser_step", **workflow_fields("01", "call_bank_history_rpc"))
     result = call_bank("view_transaction_history")
     if not result["success"]:
         flash(result["message"], "error")
@@ -318,8 +360,10 @@ def history():
 
 @app.route("/fraud/trust", methods=["POST"])
 def trust_fraud():
+    log_browser_action("trust_fraud_form_submitted")
     if not require_login():
         return redirect(url_for("login"))
+    log_event(logger, "trust_fraud_browser_step", **workflow_fields("01", "call_bank_trust_fraud_rpc"))
     result = call_bank("trust_fraud_report")
     flash(result["message"], "success" if result["success"] else "error")
     return redirect(url_for("fraud"))
@@ -327,8 +371,10 @@ def trust_fraud():
 
 @app.route("/fraud")
 def fraud():
+    log_browser_action("fraud_page_entered")
     if not require_login():
         return redirect(url_for("login"))
+    log_event(logger, "fraud_browser_step", **workflow_fields("01", "call_bank_detect_fraud_rpc"))
     result = call_bank("detect_fraud")
     if not result["success"]:
         flash(result["message"], "error")
@@ -345,8 +391,10 @@ def about():
 
 @app.route("/profile")
 def profile():
+    log_browser_action("profile_page_entered")
     if not require_login():
         return redirect(url_for("login"))
+    log_event(logger, "profile_browser_step", **workflow_fields("01", "call_bank_get_profile_rpc"))
     result = call_bank("get_user_profile")
     if not result["success"]:
         flash(result["message"], "error")
@@ -356,14 +404,17 @@ def profile():
 
 @app.route("/profile/edit", methods=["GET", "POST"])
 def edit_profile():
+    log_browser_action("edit_profile_page_entered")
     if not require_login():
         return redirect(url_for("login"))
 
+    log_event(logger, "profile_edit_browser_step", **workflow_fields("01", "load_current_profile_before_edit"))
     current_profile_result = call_bank("get_user_profile")
     current_profile = current_profile_result["data"] if current_profile_result["success"] else {}
 
     if request.method == "POST":
         profile_data = _form_dict()
+        log_browser_action("edit_profile_form_submitted", profile_data=profile_data)
         profile_data["profile_picture"] = current_profile.get("profile_picture", "")
         if not profile_data.get("full_name"):
             flash("Full name is required", "error")
@@ -378,6 +429,7 @@ def edit_profile():
         profile_picture = save_profile_picture(request.files.get("profile_picture"))
         if profile_picture:
             profile_data["profile_picture"] = profile_picture
+        log_event(logger, "profile_edit_browser_step", **workflow_fields("02", "call_bank_update_profile_rpc", profile_data=profile_data))
         result = call_bank("update_user_profile", profile_data)
         flash(result["message"], "success" if result["success"] else "error")
         if result["success"]:
@@ -392,6 +444,7 @@ def edit_profile():
 
 @app.route("/logout")
 def logout():
+    log_browser_action("logout_requested")
     log_event(logger, "logout", user=session.get("username"))
     session.clear()
     flash("Logged out successfully.", "success")

@@ -3,7 +3,7 @@ import os
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
-from app_logging import get_logger, log_event, sensitive_fields, summarize_token
+from app_logging import get_logger, log_event, sensitive_fields, summarize_token, workflow_fields
 import database
 import security
 
@@ -42,12 +42,15 @@ def _validate_registration(data):
 def register_user(registration_data):
     username = registration_data.get("username", "").strip().lower()
     registration_data["username"] = username
-    log_event(logger, "register_request", user=username)
+    log_event(logger, "register_request", user=username, received_fields=sorted(registration_data.keys()))
+    log_event(logger, "register_step", **workflow_fields("01", "normalize_username", raw_username=registration_data.get("username"), normalized_username=username))
+    log_event(logger, "register_step", **workflow_fields("02", "validate_registration_form", required_fields="username,password,action_password,full_name,phone_number,email"))
     error = _validate_registration(registration_data)
     if error:
         log_event(logger, "register_rejected", user=username, reason=error)
         return response(False, error)
 
+    log_event(logger, "register_step", **workflow_fields("03", "hash_login_and_action_passwords"))
     password_hash = security.hash_password(registration_data["password"])
     action_password_hash = security.hash_password(registration_data["action_password"])
     log_event(
@@ -59,6 +62,7 @@ def register_user(registration_data):
             action_password_hash=action_password_hash,
         ),
     )
+    log_event(logger, "register_step", **workflow_fields("04", "create_user_record", user=username, role="customer", status="active"))
     if not database.create_user(username, password_hash, action_password_hash):
         log_event(logger, "register_rejected", user=username, reason="Username already exists")
         return response(False, "Username already exists")
@@ -76,17 +80,24 @@ def register_user(registration_data):
         "country": registration_data.get("country", "").strip(),
         "occupation": registration_data.get("occupation", "").strip(),
     }
+    log_event(logger, "register_step", **workflow_fields("05", "create_customer_profile", user=username, profile_data=profile_data))
     database.create_customer_profile(username, profile_data)
+    log_event(logger, "register_step", **workflow_fields("06", "create_bank_account", user=username, account_type=registration_data.get("account_type", "Savings")))
     database.create_account(username, registration_data.get("account_type", "Savings"))
+    log_event(logger, "register_step", **workflow_fields("07", "write_register_audit_log", user=username))
     database.add_audit_log(username, "REGISTER", "Customer registered and account created")
     log_event(logger, "register_success", user=username)
     return response(True, "Registration successful")
 
 
 def login(username, password):
+    raw_username = username
     username = username.strip().lower()
-    log_event(logger, "login_request", user=username)
+    log_event(logger, "login_request", user=username, raw_username=raw_username)
+    log_event(logger, "login_step", **workflow_fields("01", "normalize_username", raw_username=raw_username, normalized_username=username))
+    log_event(logger, "login_step", **workflow_fields("02", "load_user_from_database", user=username))
     user = database.get_user(username)
+    log_event(logger, "login_step", **workflow_fields("03", "compare_submitted_password_with_hash", user=username, user_found=bool(user)))
     log_event(
         logger,
         "login_credentials_received",
@@ -105,8 +116,11 @@ def login(username, password):
         log_event(logger, "login_blocked", user=username, status=user.get("status"))
         return response(False, "User account is not active")
 
+    log_event(logger, "login_step", **workflow_fields("04", "update_last_login", user=username))
     database.update_last_login(username)
+    log_event(logger, "login_step", **workflow_fields("05", "write_login_success_audit_log", user=username))
     database.add_audit_log(username, "LOGIN_SUCCESS", "User logged in")
+    log_event(logger, "login_step", **workflow_fields("06", "create_encrypted_fernet_ticket", user=username))
     ticket = security.create_login_ticket(username)
     ticket_data = security.decrypt_ticket(ticket) or {}
     log_event(

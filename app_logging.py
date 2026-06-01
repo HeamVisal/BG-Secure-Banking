@@ -1,4 +1,5 @@
 import hashlib
+import json
 import logging
 import os
 import sys
@@ -27,8 +28,20 @@ def log_event(logger, event, **fields):
         for key, value in fields.items()
         if value is not None and value != ""
     }
-    details = " ".join(f"{key}={value}" for key, value in clean_fields.items())
+    details = " ".join(f"{key}={_format_value(value)}" for key, value in clean_fields.items())
     logger.info("%s%s", event, f" {details}" if details else "")
+
+
+def _format_value(value):
+    if isinstance(value, float):
+        return f"{value:.2f}"
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, default=str, sort_keys=True)
+    return value
+
+
+def workflow_fields(step, action, **fields):
+    return {"step": step, "action": action, **fields}
 
 
 def summarize_token(token):

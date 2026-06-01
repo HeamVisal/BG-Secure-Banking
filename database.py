@@ -20,6 +20,7 @@ def now_text():
 
 def get_connection():
     os.makedirs(DATA_DIR, exist_ok=True)
+    log_event(logger, "db_connection_open", path=DB_NAME)
     connection = sqlite3.connect(DB_NAME, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     return connection
@@ -177,6 +178,8 @@ def init_db():
     )
     for row in cursor.fetchall():
         created_at = now_text()
+        account_number = generate_account_number()
+        log_event(logger, "account_number_generated", user=row["username"], account_number=account_number, source="init_db_missing_account_backfill")
         cursor.execute(
             """
             INSERT INTO accounts
@@ -184,7 +187,7 @@ def init_db():
              daily_transfer_limit, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (generate_account_number(), row["username"], "Savings", 0.0, "USD", "active", 1000.0, created_at, created_at),
+            (account_number, row["username"], "Savings", 0.0, "USD", "active", 1000.0, created_at, created_at),
         )
     cursor.execute(
         """
@@ -204,6 +207,7 @@ def init_db():
 
 def create_user(username, password_hash, action_password_hash, role="customer", status="active"):
     try:
+        log_event(logger, "db_write_start", table="users", operation="INSERT", user=username, role=role, status=status)
         connection = get_connection()
         cursor = connection.cursor()
         cursor.execute(
@@ -214,6 +218,7 @@ def create_user(username, password_hash, action_password_hash, role="customer", 
             (username, password_hash, action_password_hash, role, status, now_text(), None),
         )
         connection.commit()
+        log_event(logger, "db_write_commit", table="users", operation="INSERT", user=username, row_id=cursor.lastrowid)
         log_event(logger, "user_created", user=username, role=role, status=status)
         return True
     except sqlite3.IntegrityError:
@@ -224,23 +229,31 @@ def create_user(username, password_hash, action_password_hash, role="customer", 
 
 
 def get_user(username):
+    log_event(logger, "db_read_start", table="users", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     connection.close()
-    return dict(user) if user else None
+    result = dict(user) if user else None
+    log_event(logger, "db_read_done", table="users", operation="SELECT_BY_USERNAME", user=username, found=bool(result), columns=sorted(result.keys()) if result else [])
+    return result
 
 
 def update_last_login(username):
+    timestamp = now_text()
+    log_event(logger, "db_write_start", table="users", operation="UPDATE_LAST_LOGIN", user=username, last_login=timestamp)
     connection = get_connection()
     cursor = connection.cursor()
-    cursor.execute("UPDATE users SET last_login = ? WHERE username = ?", (now_text(), username))
+    cursor.execute("UPDATE users SET last_login = ? WHERE username = ?", (timestamp, username))
+    changed = cursor.rowcount
     connection.commit()
     connection.close()
+    log_event(logger, "db_write_commit", table="users", operation="UPDATE_LAST_LOGIN", user=username, changed=changed)
 
 
 def create_customer_profile(username, profile_data):
+    log_event(logger, "db_write_start", table="customer_profiles", operation="INSERT", user=username, profile_data=profile_data)
     connection = get_connection()
     cursor = connection.cursor()
     created_at = now_text()
@@ -269,20 +282,26 @@ def create_customer_profile(username, profile_data):
         ),
     )
     connection.commit()
+    row_id = cursor.lastrowid
     connection.close()
+    log_event(logger, "db_write_commit", table="customer_profiles", operation="INSERT", user=username, row_id=row_id)
     log_event(logger, "profile_created", user=username)
 
 
 def get_customer_profile(username):
+    log_event(logger, "db_read_start", table="customer_profiles", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM customer_profiles WHERE username = ?", (username,))
     profile = cursor.fetchone()
     connection.close()
-    return dict(profile) if profile else None
+    result = dict(profile) if profile else None
+    log_event(logger, "db_read_done", table="customer_profiles", operation="SELECT_BY_USERNAME", user=username, found=bool(result), profile=result or {})
+    return result
 
 
 def update_customer_profile(username, profile_data):
+    log_event(logger, "db_write_start", table="customer_profiles", operation="UPDATE", user=username, profile_data=profile_data)
     allowed = ["full_name", "phone_number", "email", "address", "city", "country", "occupation", "profile_picture"]
     values = [profile_data.get(field, "") for field in allowed]
     connection = get_connection()
@@ -324,15 +343,19 @@ def update_customer_profile(username, profile_data):
     connection.commit()
     changed = cursor.rowcount > 0
     connection.close()
+    log_event(logger, "db_write_commit", table="customer_profiles", operation="UPDATE", user=username, changed=changed)
     log_event(logger, "profile_updated", user=username, changed=changed)
     return changed
 
 
 def create_account(username, account_type="Savings"):
     try:
+        log_event(logger, "db_write_start", table="accounts", operation="INSERT", user=username, account_type=account_type, starting_balance="0.00", currency="USD")
         connection = get_connection()
         cursor = connection.cursor()
         created_at = now_text()
+        account_number = generate_account_number()
+        log_event(logger, "account_number_generated", user=username, account_number=account_number)
         cursor.execute(
             """
             INSERT INTO accounts
@@ -340,9 +363,10 @@ def create_account(username, account_type="Savings"):
              daily_transfer_limit, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (generate_account_number(), username, account_type, 0.0, "USD", "active", 1000.0, created_at, created_at),
+            (account_number, username, account_type, 0.0, "USD", "active", 1000.0, created_at, created_at),
         )
         connection.commit()
+        log_event(logger, "db_write_commit", table="accounts", operation="INSERT", user=username, account_number=account_number, row_id=cursor.lastrowid)
         log_event(logger, "account_created", user=username, account_type=account_type)
         return True
     except sqlite3.IntegrityError:
@@ -353,12 +377,15 @@ def create_account(username, account_type="Savings"):
 
 
 def get_account(username):
+    log_event(logger, "db_read_start", table="accounts", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM accounts WHERE username = ?", (username,))
     account = cursor.fetchone()
     connection.close()
-    return dict(account) if account else None
+    result = dict(account) if account else None
+    log_event(logger, "db_read_done", table="accounts", operation="SELECT_BY_USERNAME", user=username, found=bool(result), account=result or {})
+    return result
 
 
 def get_balance(username):
@@ -367,6 +394,7 @@ def get_balance(username):
 
 
 def update_balance(username, new_balance):
+    log_event(logger, "db_write_start", table="accounts", operation="UPDATE_BALANCE", user=username, new_balance=float(new_balance))
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -376,6 +404,7 @@ def update_balance(username, new_balance):
     connection.commit()
     changed = cursor.rowcount > 0
     connection.close()
+    log_event(logger, "db_write_commit", table="accounts", operation="UPDATE_BALANCE", user=username, new_balance=float(new_balance), changed=changed)
     log_event(logger, "balance_saved", user=username, balance=f"{float(new_balance):.2f}", changed=changed)
     return changed
 
@@ -395,6 +424,8 @@ def add_transaction(
     balance_after=0,
     risk_score=0,
 ):
+    transaction_id = generate_transaction_id()
+    log_event(logger, "db_write_start", table="transactions", operation="INSERT", transaction_id=transaction_id, user=username, type=transaction_type, amount=float(amount), receiver=receiver_username, status=status, fraud_flag=fraud_flag, risk_score=risk_score, balance_before=float(balance_before), balance_after=float(balance_after), reason=reason)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -406,7 +437,7 @@ def add_transaction(
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
-            generate_transaction_id(),
+            transaction_id,
             username,
             account_number,
             transaction_type,
@@ -426,11 +457,13 @@ def add_transaction(
     connection.commit()
     transaction_row_id = cursor.lastrowid
     connection.close()
-    log_event(logger, "transaction_saved", row_id=transaction_row_id, user=username, type=transaction_type, status=status, amount=f"{float(amount):.2f}", fraud_flag=fraud_flag, risk_score=risk_score)
+    log_event(logger, "db_write_commit", table="transactions", operation="INSERT", transaction_id=transaction_id, row_id=transaction_row_id, user=username)
+    log_event(logger, "transaction_saved", row_id=transaction_row_id, transaction_id=transaction_id, user=username, type=transaction_type, status=status, amount=f"{float(amount):.2f}", fraud_flag=fraud_flag, risk_score=risk_score)
     return transaction_row_id
 
 
 def get_transactions(username, limit=None):
+    log_event(logger, "db_read_start", table="transactions", operation="SELECT_HISTORY", user=username, limit=limit)
     connection = get_connection()
     cursor = connection.cursor()
     sql = "SELECT * FROM transactions WHERE username = ? ORDER BY created_at DESC"
@@ -441,11 +474,14 @@ def get_transactions(username, limit=None):
     cursor.execute(sql, params)
     rows = cursor.fetchall()
     connection.close()
-    return [dict(row) for row in rows]
+    result = [dict(row) for row in rows]
+    log_event(logger, "db_read_done", table="transactions", operation="SELECT_HISTORY", user=username, count=len(result), transactions=result)
+    return result
 
 
 def get_recent_transactions(username, minutes=1):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
+    log_event(logger, "db_read_start", table="transactions", operation="SELECT_RECENT", user=username, minutes=minutes, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -458,10 +494,13 @@ def get_recent_transactions(username, minutes=1):
     )
     rows = cursor.fetchall()
     connection.close()
-    return [dict(row) for row in rows]
+    result = [dict(row) for row in rows]
+    log_event(logger, "db_read_done", table="transactions", operation="SELECT_RECENT", user=username, count=len(result), transactions=result)
+    return result
 
 
 def get_average_transaction_amount(username):
+    log_event(logger, "db_read_start", table="transactions", operation="AVG_AMOUNT", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -474,11 +513,14 @@ def get_average_transaction_amount(username):
     )
     row = cursor.fetchone()
     connection.close()
-    return float(row["average_amount"]) if row and row["average_amount"] is not None else 0.0
+    average = float(row["average_amount"]) if row and row["average_amount"] is not None else 0.0
+    log_event(logger, "db_read_done", table="transactions", operation="AVG_AMOUNT", user=username, average_amount=average)
+    return average
 
 
 def count_recent_receivers(username, minutes=5):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
+    log_event(logger, "db_read_start", table="transactions", operation="COUNT_RECENT_RECEIVERS", user=username, minutes=minutes, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -494,11 +536,14 @@ def count_recent_receivers(username, minutes=5):
     )
     row = cursor.fetchone()
     connection.close()
-    return int(row["receiver_count"]) if row else 0
+    count = int(row["receiver_count"]) if row else 0
+    log_event(logger, "db_read_done", table="transactions", operation="COUNT_RECENT_RECEIVERS", user=username, receiver_count=count)
+    return count
 
 
 def get_daily_transfer_total(username):
     since = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    log_event(logger, "db_read_start", table="transactions", operation="DAILY_TRANSFER_TOTAL", user=username, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -514,10 +559,13 @@ def get_daily_transfer_total(username):
     )
     row = cursor.fetchone()
     connection.close()
-    return float(row["total"]) if row else 0.0
+    total = float(row["total"]) if row else 0.0
+    log_event(logger, "db_read_done", table="transactions", operation="DAILY_TRANSFER_TOTAL", user=username, total=total)
+    return total
 
 
 def trust_suspicious_transactions(username):
+    log_event(logger, "db_write_start", table="transactions", operation="TRUST_SUSPICIOUS", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -536,20 +584,25 @@ def trust_suspicious_transactions(username):
     changed = cursor.rowcount
     connection.commit()
     connection.close()
+    log_event(logger, "db_write_commit", table="transactions", operation="TRUST_SUSPICIOUS", user=username, changed=changed)
     log_event(logger, "suspicious_transactions_trusted", user=username, changed=changed)
     return changed
 
 
 def count_transactions(username):
+    log_event(logger, "db_read_start", table="transactions", operation="COUNT_BY_USER", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT COUNT(*) AS total FROM transactions WHERE username = ?", (username,))
     row = cursor.fetchone()
     connection.close()
-    return int(row["total"]) if row else 0
+    total = int(row["total"]) if row else 0
+    log_event(logger, "db_read_done", table="transactions", operation="COUNT_BY_USER", user=username, total=total)
+    return total
 
 
 def add_audit_log(username, action, details="", ip_address="RPC"):
+    log_event(logger, "db_write_start", table="audit_logs", operation="INSERT", user=username, action=action, details=details, ip_address=ip_address)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -560,11 +613,14 @@ def add_audit_log(username, action, details="", ip_address="RPC"):
         (username, action, details, ip_address, now_text()),
     )
     connection.commit()
+    row_id = cursor.lastrowid
     connection.close()
+    log_event(logger, "db_write_commit", table="audit_logs", operation="INSERT", user=username, action=action, row_id=row_id)
     log_event(logger, "audit_log_saved", user=username, action=action)
 
 
 def get_audit_logs(username, limit=50):
+    log_event(logger, "db_read_start", table="audit_logs", operation="SELECT_BY_USER", user=username, limit=limit)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -578,4 +634,6 @@ def get_audit_logs(username, limit=50):
     )
     rows = cursor.fetchall()
     connection.close()
-    return [dict(row) for row in rows]
+    result = [dict(row) for row in rows]
+    log_event(logger, "db_read_done", table="audit_logs", operation="SELECT_BY_USER", user=username, count=len(result), audit_logs=result)
+    return result
