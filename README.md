@@ -126,34 +126,56 @@ All Banking Server methods validate the encrypted ticket before loading or chang
 
 ## RPC and Research Logging
 
-The project includes structured console logging so the XML-RPC flow is visible during a demo or research presentation. Logs are written by component:
+The project includes structured console logging so the browser, XML-RPC services, banking workflow, fraud rules, and database storage steps are visible during a demo or research presentation. Logs are written by component:
 
-- `[WEB]` shows browser-facing Flask actions and outgoing RPC calls to `auth` and `bank`.
-- `[AUTH_RPC]` shows registration, login, password hashing, and encrypted ticket creation.
-- `[BANK_RPC]` shows ticket validation, action password checks, balance changes, and banking operations.
-- `[FRAUD]` shows fraud/risk rule evaluation and user risk summaries.
-- `[DB]` shows important database writes such as users, accounts, transactions, and audit logs.
+- `[WEB]` shows browser-facing Flask actions, form submissions, uploaded files, and outgoing RPC calls to `auth` and `bank`.
+- `[AUTH_RPC]` shows registration and login workflow steps, including username normalization, validation, password hashing, user lookup, audit logging, and encrypted ticket creation.
+- `[BANK_RPC]` shows banking workflow steps such as ticket validation, amount parsing, action password checks, account lookup, balance calculation, transaction recording, and success/failure responses.
+- `[FRAUD]` shows each fraud/risk rule evaluation, including thresholds, observed values, whether the rule triggered, final risk score, and suspicious transaction counts.
+- `[DB]` shows database reads and writes, including table name, operation type, generated account/transaction IDs, row IDs, balance updates, transaction inserts, and audit-log inserts.
 
-Docker Compose enables research logging with:
+Docker Compose enables research logging with sensitive data visible and summary-level read logs by default:
 
 ```yaml
 APP_LOG_SENSITIVE: "1"
+APP_LOG_DETAIL: summary
 ```
 
-With this flag enabled, logs may include usernames, generated password hashes, submitted password SHA-256 fingerprints, full encrypted Fernet tickets, ticket issue/expiry times, transaction amounts, balance changes, and fraud scores. This is useful for showing how data moves across the RPC services.
+`APP_LOG_SENSITIVE` controls whether sensitive research details are printed. With this flag enabled, logs may include usernames, generated password hashes, submitted password SHA-256 fingerprints, full encrypted Fernet tickets, ticket issue/expiry times, transaction amounts, balance changes, profile fields, and fraud scores. This is useful for showing how data moves across the RPC services.
 
-This mode is for research and demonstration only. In a production-style deployment, set `APP_LOG_SENSITIVE` to `0` or remove it so full encrypted tickets and credential-related details are not printed.
+`APP_LOG_DETAIL` controls how much data is printed for noisy read operations such as dashboard, history, and fraud report transaction reads:
+
+- `summary`: prints counts, up to five transaction IDs, the latest transaction summary, and omitted row count. This is the default Docker Compose setting.
+- `full`: prints complete transaction arrays, matching the most verbose research/debug behavior.
+
+To switch back to full transaction read logs, set all services to:
+
+```yaml
+APP_LOG_DETAIL: full
+```
+
+Then restart the stack:
+
+```bash
+docker compose up --build
+```
+
+This logging setup is for research and demonstration only. In a production-style deployment, set `APP_LOG_SENSITIVE` to `0` or remove it so full encrypted tickets and credential-related details are not printed.
 
 Example combined flow:
 
 ```text
+[WEB] browser_action action=login_form_submitted user=alice password_length=...
 [WEB] rpc_request direction=WEB->AUTH method=login user=alice
-[AUTH_RPC] login_credentials_received user=alice stored_password_hash=scrypt:...
+[AUTH_RPC] login_step step=02 action=load_user_from_database user=alice
+[DB] db_read_done table=users operation=SELECT_BY_USERNAME user=alice found=True
+[AUTH_RPC] login_step step=06 action=create_encrypted_fernet_ticket user=alice
 [AUTH_RPC] ticket_issued user=alice full_encrypted_ticket=gAAAAA...
-[WEB] rpc_request direction=WEB->BANK method=get_dashboard_summary user=alice full_encrypted_ticket=gAAAAA...
-[BANK_RPC] ticket_valid user=alice issue_time=... expiry_time=...
-[FRAUD] user_risk_calculated user=alice risk_score=0 fraud_flag=0
-[WEB] rpc_response direction=WEB<-BANK method=get_dashboard_summary success=True
+[WEB] rpc_request direction=WEB->BANK method=deposit user=alice full_encrypted_ticket=gAAAAA...
+[BANK_RPC] deposit_step step=04 action=calculate_new_balance balance_before=100.00 amount=10.00 balance_after=110.00
+[FRAUD] fraud_rule_step action=large_amount_rule threshold=500 amount=10.00 triggered=False
+[DB] db_write_start table=transactions operation=INSERT transaction_id=TX...
+[BANK_RPC] deposit_success user=alice balance=110.00 risk_score=0 fraud_flag=0
 ```
 
 ## Database Schema
@@ -196,7 +218,7 @@ id, username, action, details, ip_address, created_at
 - Banking Server RPC methods reject invalid or expired tickets.
 - Withdraw and transfer operations are protected by an action password.
 - Local secrets and runtime files such as `secret.key` and `banking.db` are ignored by Git.
-- Docker Compose enables sensitive research logging with `APP_LOG_SENSITIVE: "1"`; disable this outside demos.
+- Docker Compose enables sensitive research logging with `APP_LOG_SENSITIVE: "1"` and summary read logging with `APP_LOG_DETAIL: summary`; disable sensitive logging outside demos.
 
 ## Fraud Detection
 

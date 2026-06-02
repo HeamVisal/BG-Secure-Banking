@@ -7,6 +7,7 @@ import sys
 
 LOG_LEVEL = os.environ.get("APP_LOG_LEVEL", "INFO").upper()
 LOG_SENSITIVE_DATA = os.environ.get("APP_LOG_SENSITIVE", "0") == "1"
+LOG_DETAIL = os.environ.get("APP_LOG_DETAIL", "summary").lower()
 
 
 def get_logger(component):
@@ -42,6 +43,14 @@ def _format_value(value):
 
 def workflow_fields(step, action, **fields):
     return {"step": step, "action": action, **fields}
+
+
+def log_full_details():
+    return LOG_DETAIL == "full"
+
+
+def log_detail_mode():
+    return LOG_DETAIL
 
 
 def summarize_token(token):

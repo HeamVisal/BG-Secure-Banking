@@ -4,7 +4,7 @@ import sqlite3
 import uuid
 from datetime import datetime, timedelta
 
-from app_logging import get_logger, log_event
+from app_logging import get_logger, log_event, log_full_details
 
 
 logger = get_logger("DB")
@@ -42,6 +42,31 @@ def generate_account_number():
 
 def generate_transaction_id():
     return f"TX{datetime.utcnow().strftime('%Y%m%d')}{uuid.uuid4().hex[:10].upper()}"
+
+
+def _transaction_log_fields(transactions):
+    if log_full_details():
+        return {"transactions": transactions}
+
+    preview = transactions[:5]
+    return {
+        "transaction_ids": [item.get("transaction_id") for item in preview],
+        "latest_transaction": _transaction_summary(preview[0]) if preview else {},
+        "preview_count": len(preview),
+        "omitted_count": max(len(transactions) - len(preview), 0),
+    }
+
+
+def _transaction_summary(transaction):
+    return {
+        "transaction_id": transaction.get("transaction_id"),
+        "type": transaction.get("transaction_type"),
+        "amount": transaction.get("amount"),
+        "status": transaction.get("status"),
+        "risk_score": transaction.get("risk_score"),
+        "fraud_flag": transaction.get("fraud_flag"),
+        "created_at": transaction.get("created_at"),
+    }
 
 
 def init_db():
@@ -475,7 +500,16 @@ def get_transactions(username, limit=None):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(logger, "db_read_done", table="transactions", operation="SELECT_HISTORY", user=username, count=len(result), transactions=result)
+    log_event(
+        logger,
+        "db_read_done",
+        table="transactions",
+        operation="SELECT_HISTORY",
+        user=username,
+        count=len(result),
+        detail_mode="full" if log_full_details() else "summary",
+        **_transaction_log_fields(result),
+    )
     return result
 
 
@@ -495,7 +529,16 @@ def get_recent_transactions(username, minutes=1):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(logger, "db_read_done", table="transactions", operation="SELECT_RECENT", user=username, count=len(result), transactions=result)
+    log_event(
+        logger,
+        "db_read_done",
+        table="transactions",
+        operation="SELECT_RECENT",
+        user=username,
+        count=len(result),
+        detail_mode="full" if log_full_details() else "summary",
+        **_transaction_log_fields(result),
+    )
     return result
 
 
