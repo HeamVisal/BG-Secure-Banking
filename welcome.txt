@@ -1,0 +1,117 @@
+SecureBG / Introduction2Parallel_Report handoff
+
+Current workspace:
+/media/super/DualSuper/ClassxV1/2Project-I4/Intrd2Prlls/BankingSystem/secure_bg_banking_web
+
+Main project reviewed:
+- Flask web app + XML-RPC auth service + XML-RPC banking service + SQLite.
+- Important review findings from project review:
+  1. docker-compose enables APP_LOG_SENSITIVE=1, and code can log password hashes, submitted password SHA256 fingerprints, full encrypted tickets, and registration payloads. This is a serious security risk.
+  2. Deposit/withdraw/transfer writes are not atomic. Transfer updates balances and inserts transaction rows through separate committed DB calls. A crash/error can leave inconsistent balances/ledger.
+  3. POST routes do not have CSRF protection.
+  4. Registration creates user/profile/account in separate operations and does not roll back on partial failure.
+  5. Money values use float/SQLite REAL; integer cents or Decimal would be more correct.
+- Verification done: python -m compileall . passed. No tests were found.
+
+Report folder:
+Introduction2Parallel_Report/
+- main.tex: currently only has title page.
+- Logo/: AMS-Logo.jpg, ITC_Tran_Logo.png.
+- ResultImage/: existing screenshots:
+  aboutus-web-view.png
+  dashboard-web-view.png
+  deposit-web-view.png
+  docker-hosting-view.png
+  docker-logs-process-views.png
+  fraid-report-web-view.png
+  history-web-view.png
+  login-web-view.png
+  profile-web-view.png
+  register-web-view.png
+  withdraw-view.png
+- Note: fraid-report-web-view.png is probably a typo; should be fraud-report-web-view.png if we decide to rename/update references later.
+
+Images recommended for the report:
+1. System Architecture Diagram
+2. XML-RPC Transfer Workflow Diagram
+3. Logical Database Schema Diagram
+4. Docker/runtime image already exists, so no new image needed for that.
+
+Image status:
+1. SecureBG Banking System Architecture
+- User shared generated image titled "SecureBG Banking System Architecture".
+- Decision: good/ready to use.
+- Small note: it says HTTP / HTTPS between Browser and Flask. Since local app is plain Flask HTTP unless HTTPS is configured, HTTP-only would be slightly more exact, but the image is acceptable.
+
+2. XML-RPC Transfer Workflow
+- User shared initial image titled "XML-RPC Transfer Workflow".
+- Required improvement was transfer_id -> transaction_id.
+- Improved version was shared and reviewed.
+- Decision: good/ready to use.
+- It now shows:
+  - Flask sends XML-RPC transfer(ticket, receiver, amount, action_password)
+  - Banking service validates encrypted ticket through Authentication/Security Module
+  - Banking service loads stored action password hash from SQLite
+  - Banking service loads sender/receiver accounts
+  - Fraud Detection checks risk
+  - Banking service updates balances in SQLite
+  - Banking service saves TRANSFER_OUT and TRANSFER_IN records
+  - Success response includes transaction_id, balances, status=success
+
+3. SecureBG Banking Logical Database Schema
+- User is currently generating/modifying this image.
+- Real database has logical relationships only; database.py does NOT define FOREIGN KEY constraints.
+- Therefore title should be "SecureBG Banking Logical Database Schema".
+- Bottom note should say: "Relationship lines represent logical links used by the application."
+- Logical relationships to show:
+  users.username -> customer_profiles.username
+  users.username -> accounts.username
+  users.username -> transactions.username
+  users.username -> audit_logs.username
+  accounts.account_number -> transactions.account_number
+  accounts.account_number -> transactions.receiver_account_number
+- Latest database schema image was improved, but still had one issue:
+  A vertical line dropping down from the accounts table looked dangling/unfinished.
+- Last advice:
+  Fix by removing the dangling vertical line below accounts, or reroute it clearly so it connects from accounts.account_number to transactions.receiver_account_number.
+  The receiver_account_number relationship should be a clear line ending at the transactions.receiver_account_number field, with label "receiver_account_number".
+- Everything else about the latest database schema image looked good:
+  white background, blue headers, readable tables, cleaned relationship labels, accurate bottom note.
+
+Prompt given for final database schema image fix:
+Edit the existing SecureBG Banking Logical Database Schema diagram with one small correction.
+
+Fix:
+Remove the dangling vertical line below the accounts table, or reroute it clearly so it connects from accounts.account_number to transactions.receiver_account_number.
+
+The receiver_account_number relationship should be a clear line ending at the transactions.receiver_account_number field, with the label "receiver_account_number".
+
+Keep everything else the same:
+- Same title
+- Same white background
+- Same blue table headers
+- Same table fields
+- Same bottom note
+- No redesign
+
+Suggested next step after returning:
+1. Ask user to show the updated/final database schema picture.
+2. Review whether the dangling accounts line is fixed.
+3. If good, mark all 3 diagrams ready.
+4. Then continue building/writing the LaTeX report in Introduction2Parallel_Report/main.tex using title page, sections, screenshots, and diagrams.
+
+Potential report structure to implement later:
+1. Title page
+2. Abstract / short introduction
+3. Project objectives
+4. System architecture
+5. Technologies used
+6. RPC service design
+7. Database design
+8. Main workflows: registration/login, deposit, withdraw, transfer, fraud detection
+9. Implementation details
+10. Result screenshots
+11. Security discussion
+12. Limitations and future improvements
+13. Conclusion
+
