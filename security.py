@@ -4,6 +4,9 @@ This module provides utilities for generating and loading a Fernet key,
 encrypting/decrypting login tickets, creating time-limited login tickets,
 and hashing/verifying passwords. Run with `--explain` to print a short
 description of available functions.
+
+Command to explain code line by line:
+python security.py --explain-lines
 """
 
 import argparse  # parse CLI flags like --explain / --explain-lines
