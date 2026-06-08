@@ -3,7 +3,7 @@ import threading
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
-from app_logging import get_logger, log_event, sensitive_fields, summarize_token, workflow_fields
+from app_logging import get_logger, log_event, log_full_details, sensitive_fields, summarize_token, workflow_fields
 import database
 import fraud_detection
 import security
@@ -27,15 +27,16 @@ def _username_from_ticket(ticket):
         log_event(logger, "ticket_invalid", **summarize_token(ticket), **sensitive_fields(full_encrypted_ticket=ticket))
         return None
     username = data.get("username")
-    log_event(
-        logger,
-        "ticket_valid",
-        user=username,
-        issue_time=data.get("issue_time"),
-        expiry_time=data.get("expiry_time"),
-        **summarize_token(ticket),
-        **sensitive_fields(full_encrypted_ticket=ticket),
-    )
+    if log_full_details():
+        log_event(
+            logger,
+            "ticket_valid",
+            user=username,
+            issue_time=data.get("issue_time"),
+            expiry_time=data.get("expiry_time"),
+            **summarize_token(ticket),
+            **sensitive_fields(full_encrypted_ticket=ticket),
+        )
     return username
 
 
@@ -388,19 +389,38 @@ def get_account_details(ticket):
 
 
 def get_dashboard_summary(ticket):
-    log_event(logger, "dashboard_step", **workflow_fields("00", "rpc_method_entered"))
+    if log_full_details():
+        log_event(logger, "dashboard_step", **workflow_fields("00", "rpc_method_entered"))
     username = _username_from_ticket(ticket)
     if not username:
         return response(False, "Invalid or expired token")
 
-    log_event(logger, "dashboard_step", **workflow_fields("01", "load_user_profile_account", user=username))
+    if log_full_details():
+        log_event(logger, "dashboard_step", **workflow_fields("01", "load_user_profile_account", user=username))
     user = database.get_user(username) or {}
     profile = database.get_customer_profile(username) or {}
     account = database.get_account(username)
     if not account:
         return response(False, "Account not found")
-    log_event(logger, "dashboard_step", **workflow_fields("02", "calculate_risk_and_summary_counts", user=username))
+    if log_full_details():
+        log_event(logger, "dashboard_step", **workflow_fields("02", "calculate_risk_and_summary_counts", user=username))
     risk = fraud_detection.calculate_user_risk_score(username)
+    total_transactions = database.count_transactions(username)
+    last_transactions = database.get_transactions(username, limit=5)
+    if not log_full_details():
+        log_event(
+            logger,
+            "Dashboard()",
+            user=username,
+            full_name=profile.get("full_name", username),
+            account=account["account_number"],
+            balance=account["balance"],
+            currency=account["currency"],
+            transactions=total_transactions,
+            risk_score=risk["risk_score"],
+            fraud_flag=risk["fraud_flag"],
+            recent_count=len(last_transactions),
+        )
     return response(
         True,
         "Dashboard summary loaded",
@@ -414,8 +434,8 @@ def get_dashboard_summary(ticket):
             "currency": account["currency"],
             "account_status": account["status"],
             "risk_score": risk["risk_score"],
-            "total_transactions": database.count_transactions(username),
-            "last_transactions": database.get_transactions(username, limit=5),
+            "total_transactions": total_transactions,
+            "last_transactions": last_transactions,
             "last_login": user.get("last_login"),
         },
     )
@@ -434,7 +454,7 @@ def main():
 
     host = os.environ.get("BANK_HOST", "127.0.0.1")
     port = int(os.environ.get("BANK_PORT", "8002"))
-    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
+    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=log_full_details())
     log_event(logger, "service_start", url=f"http://{host}:{port}")
     for function in [
         get_balance,

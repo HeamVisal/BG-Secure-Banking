@@ -1,4 +1,4 @@
-from app_logging import get_logger, log_event, workflow_fields
+from app_logging import get_logger, log_event, log_full_details, workflow_fields
 import database
 
 
@@ -86,10 +86,12 @@ def check_transaction_risk(
 
 
 def calculate_user_risk_score(username):
-    log_event(logger, "user_risk_step", **workflow_fields("01", "load_all_transactions", user=username))
+    if log_full_details():
+        log_event(logger, "user_risk_step", **workflow_fields("01", "load_all_transactions", user=username))
     transactions = database.get_transactions(username)
     suspicious = [item for item in transactions if item["fraud_flag"] == 1]
-    log_event(logger, "user_risk_step", **workflow_fields("02", "filter_suspicious_transactions", user=username, total_transactions=len(transactions), suspicious_count=len(suspicious)))
+    if log_full_details():
+        log_event(logger, "user_risk_step", **workflow_fields("02", "filter_suspicious_transactions", user=username, total_transactions=len(transactions), suspicious_count=len(suspicious)))
 
     score = min(100, sum(int(item.get("risk_score") or 0) for item in suspicious))
     reasons = []
@@ -100,15 +102,16 @@ def calculate_user_risk_score(username):
                     reasons.append(reason)
 
     fraud_flag = 1 if suspicious else 0
-    log_event(
-        logger,
-        "user_risk_calculated",
-        user=username,
-        risk_score=score,
-        fraud_flag=fraud_flag,
-        suspicious_count=len(suspicious),
-        reasons="; ".join(reasons),
-    )
+    if log_full_details():
+        log_event(
+            logger,
+            "user_risk_calculated",
+            user=username,
+            risk_score=score,
+            fraud_flag=fraud_flag,
+            suspicious_count=len(suspicious),
+            reasons="; ".join(reasons),
+        )
     return {
         "fraud_flag": fraud_flag,
         "risk_score": score,

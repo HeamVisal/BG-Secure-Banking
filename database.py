@@ -278,20 +278,23 @@ def get_user(username):
     user = cursor.fetchone()
     connection.close()
     result = dict(user) if user else None
-    log_event(logger, "user_loaded", user=username, found=bool(result), role=result.get("role") if result else None, status=result.get("status") if result else None)
+    if log_full_details():
+        log_event(logger, "user_loaded", user=username, found=bool(result), role=result.get("role") if result else None, status=result.get("status") if result else None)
     return result
 
 
 def update_last_login(username):
     timestamp = now_text()
-    log_event(logger, "db_write_start", table="users", operation="UPDATE_LAST_LOGIN", user=username, last_login=timestamp)
+    if log_full_details():
+        log_event(logger, "db_write_start", table="users", operation="UPDATE_LAST_LOGIN", user=username, last_login=timestamp)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("UPDATE users SET last_login = ? WHERE username = ?", (timestamp, username))
     changed = cursor.rowcount
     connection.commit()
     connection.close()
-    log_event(logger, "db_write_commit", table="users", operation="UPDATE_LAST_LOGIN", user=username, changed=changed)
+    if log_full_details():
+        log_event(logger, "last_login_updated", user=username, changed=changed, last_login=timestamp)
 
 
 def create_customer_profile(username, profile_data):
@@ -339,7 +342,8 @@ def get_customer_profile(username):
     profile = cursor.fetchone()
     connection.close()
     result = dict(profile) if profile else None
-    log_event(logger, "profile_loaded", user=username, found=bool(result), **(_profile_summary(result) if result else {}))
+    if log_full_details():
+        log_event(logger, "profile_loaded", user=username, found=bool(result), **(_profile_summary(result) if result else {}))
     return result
 
 
@@ -428,7 +432,8 @@ def get_account(username):
     account = cursor.fetchone()
     connection.close()
     result = dict(account) if account else None
-    log_event(logger, "account_loaded", user=username, found=bool(result), **(_account_summary(result) if result else {}))
+    if log_full_details():
+        log_event(logger, "account_loaded", user=username, found=bool(result), **(_account_summary(result) if result else {}))
     return result
 
 
@@ -520,15 +525,16 @@ def get_transactions(username, limit=None):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(
-        logger,
-        "transactions_loaded",
-        user=username,
-        count=len(result),
-        limit=limit,
-        detail_mode="full" if log_full_details() else "summary",
-        **_transaction_log_fields(result),
-    )
+    if log_full_details():
+        log_event(
+            logger,
+            "transactions_loaded",
+            user=username,
+            count=len(result),
+            limit=limit,
+            detail_mode="full",
+            **_transaction_log_fields(result),
+        )
     return result
 
 
@@ -549,15 +555,16 @@ def get_recent_transactions(username, minutes=1):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(
-        logger,
-        "recent_transactions_loaded",
-        user=username,
-        count=len(result),
-        window_minutes=minutes,
-        detail_mode="full" if log_full_details() else "summary",
-        **_transaction_log_fields(result),
-    )
+    if log_full_details():
+        log_event(
+            logger,
+            "recent_transactions_loaded",
+            user=username,
+            count=len(result),
+            window_minutes=minutes,
+            detail_mode="full",
+            **_transaction_log_fields(result),
+        )
     return result
 
 
@@ -577,7 +584,8 @@ def get_average_transaction_amount(username):
     row = cursor.fetchone()
     connection.close()
     average = float(row["average_amount"]) if row and row["average_amount"] is not None else 0.0
-    log_event(logger, "average_transaction_amount_loaded", user=username, average_amount=average)
+    if log_full_details():
+        log_event(logger, "average_transaction_amount_loaded", user=username, average_amount=average)
     return average
 
 
@@ -601,7 +609,8 @@ def count_recent_receivers(username, minutes=5):
     row = cursor.fetchone()
     connection.close()
     count = int(row["receiver_count"]) if row else 0
-    log_event(logger, "recent_receiver_count_loaded", user=username, receiver_count=count, window_minutes=minutes)
+    if log_full_details():
+        log_event(logger, "recent_receiver_count_loaded", user=username, receiver_count=count, window_minutes=minutes)
     return count
 
 
@@ -625,7 +634,8 @@ def get_daily_transfer_total(username):
     row = cursor.fetchone()
     connection.close()
     total = float(row["total"]) if row else 0.0
-    log_event(logger, "daily_transfer_total_loaded", user=username, total=total)
+    if log_full_details():
+        log_event(logger, "daily_transfer_total_loaded", user=username, total=total)
     return total
 
 
@@ -663,12 +673,14 @@ def count_transactions(username):
     row = cursor.fetchone()
     connection.close()
     total = int(row["total"]) if row else 0
-    log_event(logger, "transaction_count_loaded", user=username, total=total)
+    if log_full_details():
+        log_event(logger, "transaction_count_loaded", user=username, total=total)
     return total
 
 
 def add_audit_log(username, action, details="", ip_address="RPC"):
-    log_event(logger, "db_write_start", table="audit_logs", operation="INSERT", user=username, action=action, details=details, ip_address=ip_address)
+    if log_full_details():
+        log_event(logger, "db_write_start", table="audit_logs", operation="INSERT", user=username, action=action, details=details, ip_address=ip_address)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -681,8 +693,10 @@ def add_audit_log(username, action, details="", ip_address="RPC"):
     connection.commit()
     row_id = cursor.lastrowid
     connection.close()
-    log_event(logger, "db_write_commit", table="audit_logs", operation="INSERT", user=username, action=action, row_id=row_id)
-    log_event(logger, "audit_log_saved", user=username, action=action)
+    if log_full_details():
+        log_event(logger, "db_write_commit", table="audit_logs", operation="INSERT", user=username, action=action, row_id=row_id)
+    if log_full_details():
+        log_event(logger, "audit_log_saved", user=username, action=action, row_id=row_id)
 
 
 def get_audit_logs(username, limit=50):
@@ -702,5 +716,6 @@ def get_audit_logs(username, limit=50):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(logger, "audit_logs_loaded", user=username, count=len(result), limit=limit, audit_logs=result if log_full_details() else None)
+    if log_full_details():
+        log_event(logger, "audit_logs_loaded", user=username, count=len(result), limit=limit, audit_logs=result)
     return result

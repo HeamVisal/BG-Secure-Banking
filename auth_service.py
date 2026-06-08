@@ -3,7 +3,7 @@ import os
 from socketserver import ThreadingMixIn
 from xmlrpc.server import SimpleXMLRPCServer
 
-from app_logging import get_logger, log_event, sensitive_fields, summarize_token, workflow_fields
+from app_logging import get_logger, log_event, log_full_details, sensitive_fields, summarize_token, workflow_fields
 import database
 import security
 
@@ -93,46 +93,66 @@ def register_user(registration_data):
 def login(username, password):
     raw_username = username
     username = username.strip().lower()
-    log_event(logger, "login_request", user=username, raw_username=raw_username)
-    log_event(logger, "login_step", **workflow_fields("01", "normalize_username", raw_username=raw_username, normalized_username=username))
-    log_event(logger, "login_step", **workflow_fields("02", "load_user_from_database", user=username))
+    if log_full_details():
+        log_event(logger, "login_request", user=username, raw_username=raw_username)
+        log_event(logger, "login_step", **workflow_fields("01", "normalize_username", raw_username=raw_username, normalized_username=username))
+        log_event(logger, "login_step", **workflow_fields("02", "load_user_from_database", user=username))
+    else:
+        log_event(logger, "Login()", user=username, password_length=len(password or ""))
     user = database.get_user(username)
-    log_event(logger, "login_step", **workflow_fields("03", "compare_submitted_password_with_hash", user=username, user_found=bool(user)))
-    log_event(
-        logger,
-        "login_credentials_received",
-        user=username,
-        **sensitive_fields(
-            submitted_password_sha256=hashlib.sha256(password.encode("utf-8")).hexdigest(),
-            stored_password_hash=user.get("password_hash") if user else "missing_user",
-        ),
-    )
+    if log_full_details():
+        log_event(logger, "login_step", **workflow_fields("03", "compare_submitted_password_with_hash", user=username, user_found=bool(user)))
+    if log_full_details():
+        log_event(
+            logger,
+            "login_credentials_received",
+            user=username,
+            **sensitive_fields(
+                submitted_password_sha256=hashlib.sha256(password.encode("utf-8")).hexdigest(),
+                stored_password_hash=user.get("password_hash") if user else "missing_user",
+            ),
+        )
     if not user or not security.verify_password(password, user["password_hash"]):
         database.add_audit_log(username, "LOGIN_FAILED", "Invalid username or password")
-        log_event(logger, "login_failed", user=username, reason="Invalid username or password")
+        log_event(logger, "LoginFailed()", user=username, reason="Invalid username or password")
         return response(False, "Invalid username or password")
     if user.get("status") != "active":
         database.add_audit_log(username, "LOGIN_BLOCKED", "User status is not active")
-        log_event(logger, "login_blocked", user=username, status=user.get("status"))
+        log_event(logger, "LoginBlocked()", user=username, status=user.get("status"))
         return response(False, "User account is not active")
 
-    log_event(logger, "login_step", **workflow_fields("04", "update_last_login", user=username))
+    if log_full_details():
+        log_event(logger, "login_step", **workflow_fields("04", "update_last_login", user=username))
     database.update_last_login(username)
-    log_event(logger, "login_step", **workflow_fields("05", "write_login_success_audit_log", user=username))
+    if log_full_details():
+        log_event(logger, "login_step", **workflow_fields("05", "write_login_success_audit_log", user=username))
     database.add_audit_log(username, "LOGIN_SUCCESS", "User logged in")
-    log_event(logger, "login_step", **workflow_fields("06", "create_encrypted_fernet_ticket", user=username))
+    if log_full_details():
+        log_event(logger, "login_step", **workflow_fields("06", "create_encrypted_fernet_ticket", user=username))
     ticket = security.create_login_ticket(username)
     ticket_data = security.decrypt_ticket(ticket) or {}
-    log_event(
-        logger,
-        "ticket_issued",
-        user=username,
-        issue_time=ticket_data.get("issue_time"),
-        expiry_time=ticket_data.get("expiry_time"),
-        **summarize_token(ticket),
-        **sensitive_fields(full_encrypted_ticket=ticket),
-    )
-    log_event(logger, "login_success", user=username)
+    token_summary = summarize_token(ticket)
+    if log_full_details():
+        log_event(
+            logger,
+            "ticket_issued",
+            user=username,
+            issue_time=ticket_data.get("issue_time"),
+            expiry_time=ticket_data.get("expiry_time"),
+            **token_summary,
+            **sensitive_fields(full_encrypted_ticket=ticket),
+        )
+        log_event(logger, "login_success", user=username)
+    else:
+        log_event(
+            logger,
+            "LoginSuccess()",
+            user=username,
+            password_hash="verified",
+            token=token_summary.get("token_preview"),
+            token_sha256_16=token_summary.get("token_sha256_16"),
+            expires=ticket_data.get("expiry_time"),
+        )
     return response(True, "Login successful", {"ticket": ticket, "username": username})
 
 
@@ -142,7 +162,7 @@ def main():
 
     host = os.environ.get("AUTH_HOST", "127.0.0.1")
     port = int(os.environ.get("AUTH_PORT", "8001"))
-    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=True)
+    server = ThreadedXMLRPCServer((host, port), allow_none=True, logRequests=log_full_details())
     log_event(logger, "service_start", url=f"http://{host}:{port}")
     server.register_function(register_user, "register_user")
     server.register_function(login, "login")

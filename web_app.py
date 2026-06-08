@@ -1,3 +1,4 @@
+import logging
 import os
 import uuid
 from xmlrpc.client import Fault, ProtocolError, ServerProxy
@@ -6,13 +7,15 @@ from flask import Flask, flash, redirect, render_template, request, session, url
 from PIL import Image, ImageOps
 from werkzeug.utils import secure_filename
 
-from app_logging import get_logger, log_event, sensitive_fields, summarize_token, workflow_fields
+from app_logging import get_logger, log_event, log_full_details, sensitive_fields, summarize_token, workflow_fields
 import security
 
 
 AUTH_RPC_URL = os.environ.get("AUTH_RPC_URL", "http://127.0.0.1:8001")
 BANK_RPC_URL = os.environ.get("BANK_RPC_URL", "http://127.0.0.1:8002")
 logger = get_logger("WEB")
+if not log_full_details():
+    logging.getLogger("werkzeug").setLevel(logging.WARNING)
 
 app = Flask(__name__)
 app.secret_key = security.stable_flask_secret()
@@ -173,7 +176,7 @@ def register():
     log_browser_action("register_page_entered")
     if request.method == "POST":
         form_data = _form_dict()
-        log_browser_action("register_form_submitted", submitted_data=form_data)
+        log_browser_action("register_form_submitted", submitted_data=form_data if log_full_details() else None)
         log_event(logger, "register_browser_step", **workflow_fields("01", "validate_registration_before_rpc", user=form_data.get("username")))
         error = validate_registration(form_data)
         if error:
@@ -182,7 +185,7 @@ def register():
         form_data["profile_picture"] = save_profile_picture(request.files.get("profile_picture"))
         try:
             log_event(logger, "rpc_request", direction="WEB->AUTH", method="register_user", user=form_data.get("username"))
-            log_event(logger, "register_browser_step", **workflow_fields("02", "send_registration_to_auth_rpc", user=form_data.get("username"), payload=form_data))
+            log_event(logger, "register_browser_step", **workflow_fields("02", "send_registration_to_auth_rpc", user=form_data.get("username"), payload=form_data if log_full_details() else None))
             result = auth_rpc().register_user(form_data)
             log_event(logger, "rpc_response", direction="WEB<-AUTH", method="register_user", user=form_data.get("username"), success=result.get("success"), message=result.get("message"))
         except OSError:
