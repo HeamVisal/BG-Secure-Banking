@@ -74,5 +74,14 @@ def sensitive_fields(**fields):
         for key, value in fields.items()
         if value is not None
         and value != ""
-        and (LOG_DETAIL == "full" or not key.startswith("full_"))
+        and (LOG_DETAIL == "full" or _summary_safe_sensitive_key(key))
     }
+
+
+def _summary_safe_sensitive_key(key):
+    key = key.lower()
+    if key.startswith("full_"):
+        return False
+    if "password" in key:
+        return False
+    return True
