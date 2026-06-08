@@ -72,5 +72,7 @@ def sensitive_fields(**fields):
     return {
         key: value
         for key, value in fields.items()
-        if value is not None and value != ""
+        if value is not None
+        and value != ""
+        and (LOG_DETAIL == "full" or not key.startswith("full_"))
     }

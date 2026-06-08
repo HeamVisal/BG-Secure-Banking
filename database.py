@@ -20,7 +20,8 @@ def now_text():
 
 def get_connection():
     os.makedirs(DATA_DIR, exist_ok=True)
-    log_event(logger, "db_connection_open", path=DB_NAME)
+    if log_full_details():
+        log_event(logger, "db_connection_open", path=DB_NAME)
     connection = sqlite3.connect(DB_NAME, check_same_thread=False)
     connection.row_factory = sqlite3.Row
     return connection
@@ -48,12 +49,9 @@ def _transaction_log_fields(transactions):
     if log_full_details():
         return {"transactions": transactions}
 
-    preview = transactions[:5]
+    latest = transactions[0] if transactions else None
     return {
-        "transaction_ids": [item.get("transaction_id") for item in preview],
-        "latest_transaction": _transaction_summary(preview[0]) if preview else {},
-        "preview_count": len(preview),
-        "omitted_count": max(len(transactions) - len(preview), 0),
+        "latest_transaction": _transaction_summary(latest) if latest else {},
     }
 
 
@@ -65,7 +63,25 @@ def _transaction_summary(transaction):
         "status": transaction.get("status"),
         "risk_score": transaction.get("risk_score"),
         "fraud_flag": transaction.get("fraud_flag"),
-        "created_at": transaction.get("created_at"),
+    }
+
+
+def _profile_summary(profile):
+    return {
+        "full_name": profile.get("full_name"),
+        "email": profile.get("email"),
+        "city": profile.get("city"),
+        "country": profile.get("country"),
+    }
+
+
+def _account_summary(account):
+    return {
+        "account_number": account.get("account_number"),
+        "type": account.get("account_type"),
+        "balance": account.get("balance"),
+        "currency": account.get("currency"),
+        "status": account.get("status"),
     }
 
 
@@ -254,14 +270,15 @@ def create_user(username, password_hash, action_password_hash, role="customer", 
 
 
 def get_user(username):
-    log_event(logger, "db_read_start", table="users", operation="SELECT_BY_USERNAME", user=username)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="users", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     connection.close()
     result = dict(user) if user else None
-    log_event(logger, "db_read_done", table="users", operation="SELECT_BY_USERNAME", user=username, found=bool(result), columns=sorted(result.keys()) if result else [])
+    log_event(logger, "user_loaded", user=username, found=bool(result), role=result.get("role") if result else None, status=result.get("status") if result else None)
     return result
 
 
@@ -314,14 +331,15 @@ def create_customer_profile(username, profile_data):
 
 
 def get_customer_profile(username):
-    log_event(logger, "db_read_start", table="customer_profiles", operation="SELECT_BY_USERNAME", user=username)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="customer_profiles", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM customer_profiles WHERE username = ?", (username,))
     profile = cursor.fetchone()
     connection.close()
     result = dict(profile) if profile else None
-    log_event(logger, "db_read_done", table="customer_profiles", operation="SELECT_BY_USERNAME", user=username, found=bool(result), profile=result or {})
+    log_event(logger, "profile_loaded", user=username, found=bool(result), **(_profile_summary(result) if result else {}))
     return result
 
 
@@ -402,14 +420,15 @@ def create_account(username, account_type="Savings"):
 
 
 def get_account(username):
-    log_event(logger, "db_read_start", table="accounts", operation="SELECT_BY_USERNAME", user=username)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="accounts", operation="SELECT_BY_USERNAME", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT * FROM accounts WHERE username = ?", (username,))
     account = cursor.fetchone()
     connection.close()
     result = dict(account) if account else None
-    log_event(logger, "db_read_done", table="accounts", operation="SELECT_BY_USERNAME", user=username, found=bool(result), account=result or {})
+    log_event(logger, "account_loaded", user=username, found=bool(result), **(_account_summary(result) if result else {}))
     return result
 
 
@@ -488,7 +507,8 @@ def add_transaction(
 
 
 def get_transactions(username, limit=None):
-    log_event(logger, "db_read_start", table="transactions", operation="SELECT_HISTORY", user=username, limit=limit)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="SELECT_HISTORY", user=username, limit=limit)
     connection = get_connection()
     cursor = connection.cursor()
     sql = "SELECT * FROM transactions WHERE username = ? ORDER BY created_at DESC"
@@ -502,11 +522,10 @@ def get_transactions(username, limit=None):
     result = [dict(row) for row in rows]
     log_event(
         logger,
-        "db_read_done",
-        table="transactions",
-        operation="SELECT_HISTORY",
+        "transactions_loaded",
         user=username,
         count=len(result),
+        limit=limit,
         detail_mode="full" if log_full_details() else "summary",
         **_transaction_log_fields(result),
     )
@@ -515,7 +534,8 @@ def get_transactions(username, limit=None):
 
 def get_recent_transactions(username, minutes=1):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
-    log_event(logger, "db_read_start", table="transactions", operation="SELECT_RECENT", user=username, minutes=minutes, since=since)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="SELECT_RECENT", user=username, minutes=minutes, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -531,11 +551,10 @@ def get_recent_transactions(username, minutes=1):
     result = [dict(row) for row in rows]
     log_event(
         logger,
-        "db_read_done",
-        table="transactions",
-        operation="SELECT_RECENT",
+        "recent_transactions_loaded",
         user=username,
         count=len(result),
+        window_minutes=minutes,
         detail_mode="full" if log_full_details() else "summary",
         **_transaction_log_fields(result),
     )
@@ -543,7 +562,8 @@ def get_recent_transactions(username, minutes=1):
 
 
 def get_average_transaction_amount(username):
-    log_event(logger, "db_read_start", table="transactions", operation="AVG_AMOUNT", user=username)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="AVG_AMOUNT", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -557,13 +577,14 @@ def get_average_transaction_amount(username):
     row = cursor.fetchone()
     connection.close()
     average = float(row["average_amount"]) if row and row["average_amount"] is not None else 0.0
-    log_event(logger, "db_read_done", table="transactions", operation="AVG_AMOUNT", user=username, average_amount=average)
+    log_event(logger, "average_transaction_amount_loaded", user=username, average_amount=average)
     return average
 
 
 def count_recent_receivers(username, minutes=5):
     since = (datetime.utcnow() - timedelta(minutes=minutes)).isoformat()
-    log_event(logger, "db_read_start", table="transactions", operation="COUNT_RECENT_RECEIVERS", user=username, minutes=minutes, since=since)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="COUNT_RECENT_RECEIVERS", user=username, minutes=minutes, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -580,13 +601,14 @@ def count_recent_receivers(username, minutes=5):
     row = cursor.fetchone()
     connection.close()
     count = int(row["receiver_count"]) if row else 0
-    log_event(logger, "db_read_done", table="transactions", operation="COUNT_RECENT_RECEIVERS", user=username, receiver_count=count)
+    log_event(logger, "recent_receiver_count_loaded", user=username, receiver_count=count, window_minutes=minutes)
     return count
 
 
 def get_daily_transfer_total(username):
     since = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    log_event(logger, "db_read_start", table="transactions", operation="DAILY_TRANSFER_TOTAL", user=username, since=since)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="DAILY_TRANSFER_TOTAL", user=username, since=since)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -603,7 +625,7 @@ def get_daily_transfer_total(username):
     row = cursor.fetchone()
     connection.close()
     total = float(row["total"]) if row else 0.0
-    log_event(logger, "db_read_done", table="transactions", operation="DAILY_TRANSFER_TOTAL", user=username, total=total)
+    log_event(logger, "daily_transfer_total_loaded", user=username, total=total)
     return total
 
 
@@ -633,14 +655,15 @@ def trust_suspicious_transactions(username):
 
 
 def count_transactions(username):
-    log_event(logger, "db_read_start", table="transactions", operation="COUNT_BY_USER", user=username)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="transactions", operation="COUNT_BY_USER", user=username)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute("SELECT COUNT(*) AS total FROM transactions WHERE username = ?", (username,))
     row = cursor.fetchone()
     connection.close()
     total = int(row["total"]) if row else 0
-    log_event(logger, "db_read_done", table="transactions", operation="COUNT_BY_USER", user=username, total=total)
+    log_event(logger, "transaction_count_loaded", user=username, total=total)
     return total
 
 
@@ -663,7 +686,8 @@ def add_audit_log(username, action, details="", ip_address="RPC"):
 
 
 def get_audit_logs(username, limit=50):
-    log_event(logger, "db_read_start", table="audit_logs", operation="SELECT_BY_USER", user=username, limit=limit)
+    if log_full_details():
+        log_event(logger, "db_read_start", table="audit_logs", operation="SELECT_BY_USER", user=username, limit=limit)
     connection = get_connection()
     cursor = connection.cursor()
     cursor.execute(
@@ -678,5 +702,5 @@ def get_audit_logs(username, limit=50):
     rows = cursor.fetchall()
     connection.close()
     result = [dict(row) for row in rows]
-    log_event(logger, "db_read_done", table="audit_logs", operation="SELECT_BY_USER", user=username, count=len(result), audit_logs=result)
+    log_event(logger, "audit_logs_loaded", user=username, count=len(result), limit=limit, audit_logs=result if log_full_details() else None)
     return result
